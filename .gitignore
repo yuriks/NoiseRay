@@ -1,0 +1,10 @@
+*.swp
+
+/Debug/
+/Release/
+*.opensdf
+/NoiseRay.sdf
+/NoiseRay.*.suo
+/NoiseRay.vcxproj.user
+
+/output.png
