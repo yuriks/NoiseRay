@@ -101,7 +101,8 @@ struct ShapeSphere : SceneShape {
 		Intersection i;
 		i.t = t1;
 		i.position = r(t1);
-		i.uv = mvec2(std::atan2(i.position[1], i.position[0]), std::acos(i.position[2] / radius));
+		vec3 local_pos = local_ray(t1);
+		i.uv = mvec2(std::atan2(local_pos[2], local_pos[0]) / pi + 1.0f, std::acos(local_pos[1] / radius) / pi);
 		i.normal = mvec3(transpose(transform.localFromParent) * mvec4(normalized(local_ray(t1)), 0.0f));
 		return make_optional<Intersection>(i);
 	}
