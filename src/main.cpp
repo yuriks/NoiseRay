@@ -153,17 +153,22 @@ struct SceneLight {
 	vec3 intensity;
 };
 
+float focal_distance_from_fov(const float fov_degrees) {
+	const float half_fov = fov_degrees / 360.0f * pi;
+	return std::tan(0.5f*pi - half_fov);
+}
+
 struct Camera {
 	vec3 origin;
 	mat3 orientation;
-	float focal_distance; // distance from image plane
+	float focal_length; // distance from image plane
 
-	Camera(vec3 origin, mat3 orientation, float focal_distance)
-		: origin(origin), orientation(orientation), focal_distance(focal_distance)
+	Camera(vec3 origin, mat3 orientation, float vertical_fov)
+		: origin(origin), orientation(orientation), focal_length(focal_distance_from_fov(vertical_fov))
 	{}
 
 	Ray createRay(const vec2 film_pos) const {
-		const vec3 cameraspace_ray = mvec3(film_pos[0], film_pos[1], focal_distance);
+		const vec3 cameraspace_ray = mvec3(film_pos[0], film_pos[1], focal_length);
 		return Ray{origin, orientation * cameraspace_ray};
 	}
 };
@@ -185,7 +190,7 @@ private:
 };
 
 Scene setup_scene() {
-	Scene s(Camera(vec3_0, orient(vec3_y, vec3_z), 0.5f));
+	Scene s(Camera(vec3_0, orient(vec3_y, vec3_z), 75.0f));
 	s.objects.push_back(SceneObject(
 		Material(vec3_1),
 		std::make_unique<ShapeSphere>(TransformPair().translate(vec3_z * 2))
