@@ -82,7 +82,7 @@
     <ClCompile Include="libyuriks\math\misc.cpp" />
     <ClCompile Include="libyuriks\math\Quaternion.cpp" />
     <ClCompile Include="libyuriks\math\Sphere.cpp" />
-    <ClCompile Include="libyuriks\output.cpp" />
+    <ClCompile Include="src\output.cpp" />
     <ClCompile Include="libyuriks\stb_image_write.cpp" />
     <ClCompile Include="src\main.cpp" />
   </ItemGroup>
@@ -96,7 +96,7 @@
     <ClInclude Include="libyuriks\math\TransformPair.hpp" />
     <ClInclude Include="libyuriks\math\vec.hpp" />
     <ClInclude Include="libyuriks\Optional.hpp" />
-    <ClInclude Include="libyuriks\output.hpp" />
+    <ClInclude Include="src\output.hpp" />
     <ClInclude Include="libyuriks\srgb.hpp" />
     <ClInclude Include="libyuriks\stb_image_write.h" />
     <ClInclude Include="libyuriks\noncopyable.hpp" />
