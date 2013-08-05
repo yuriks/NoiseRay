@@ -23,15 +23,6 @@ struct Material {
 	{}
 };
 
-struct Plane {
-	vec3 normal;
-	float distance;
-
-	Plane(vec3 normal, float distance)
-		: normal(normalized(normal)), distance(distance)
-	{}
-};
-
 struct SceneShape {
 	TransformPair transform;
 
