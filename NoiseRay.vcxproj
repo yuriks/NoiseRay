@@ -93,6 +93,7 @@
     <ClInclude Include="libyuriks\math\Quaternion.hpp" />
     <ClInclude Include="libyuriks\math\Ray.hpp" />
     <ClInclude Include="libyuriks\math\Sphere.hpp" />
+    <ClInclude Include="libyuriks\math\TransformPair.hpp" />
     <ClInclude Include="libyuriks\math\vec.hpp" />
     <ClInclude Include="libyuriks\Optional.hpp" />
     <ClInclude Include="libyuriks\output.hpp" />
