@@ -77,11 +77,10 @@ struct ShapeSphere : SceneShape {
 		float t1, t2;
 		const int solutions = solve_quadratic(dot(v, v), 2*dot(o, v), dot(o, o) - 1.0f, t1, t2);
 		
-		if (solutions > 0) {
-			return make_optional<float>(t1);
-		} else {
+		if (solutions == 0 || t1 < 0.0f) {
 			return Optional<float>();
 		}
+		return make_optional<float>(t1);
 	}
 
 	virtual Optional<Intersection> intersect(const Ray& r) const override {
@@ -92,7 +91,7 @@ struct ShapeSphere : SceneShape {
 		float t1, t2;
 		const int solutions = solve_quadratic(dot(v, v), 2*dot(o, v), dot(o, o) - 1.0f, t1, t2);
 
-		if (solutions == 0) {
+		if (solutions == 0 || t1 < 0.0f) {
 			return Optional<Intersection>();
 		}
 
@@ -114,6 +113,9 @@ struct ShapePlane : SceneShape {
 	virtual Optional<float> hasIntersection(const Ray& r) const override {
 		const Ray local_ray = transform.localFromParent * r;
 		const float t = -local_ray.origin[1] / local_ray.direction[1];
+		if (t < 0.0f) {
+			return Optional<float>();
+		}
 		return make_optional<float>(t);
 	}
 
