@@ -23,6 +23,19 @@ struct Material {
 	{}
 };
 
+struct SceneObject;
+struct SceneShape;
+
+struct Intersection {
+	float t;
+	vec3 position;
+	vec3 normal;
+	vec2 uv;
+
+	const SceneObject* object;
+	const SceneShape* shape;
+};
+
 struct SceneShape {
 	TransformPair transform;
 
@@ -30,7 +43,25 @@ struct SceneShape {
 		: transform(std::move(transform))
 	{}
 
-	virtual Optional<float> intersect(const Ray r) const = 0;
+	virtual Optional<float> hasIntersection(const Ray& r) const = 0;
+
+	Optional<float> hasIntersection(const Ray& r, float max_t) const {
+		const Optional<float> t = hasIntersection(r);
+		if (t && *t > max_t) {
+			return Optional<float>();
+		}
+		return t;
+	}
+
+	virtual Optional<Intersection> intersect(const Ray& r) const = 0;
+
+	Optional<Intersection> intersect(const Ray& r, float max_t) const {
+		const Optional<Intersection> intersection = intersect(r);
+		if (intersection && intersection->t > max_t) {
+			return Optional<Intersection>();
+		}
+		return intersection;
+	}
 };
 
 struct ShapeSphere : SceneShape {
@@ -40,7 +71,7 @@ struct ShapeSphere : SceneShape {
 		: SceneShape(transform), radius(radius)
 	{}
 
-	virtual Optional<float> intersect(const Ray r) const {
+	virtual Optional<float> hasIntersection(const Ray& r) const override {
 		const Ray local_ray = transform.localFromParent * r;
 		const vec3 o = local_ray.origin;
 		const vec3 v = local_ray.direction;
@@ -48,13 +79,31 @@ struct ShapeSphere : SceneShape {
 		float t1, t2;
 		const int solutions = solve_quadratic(dot(v, v), 2*dot(o, v), dot(o, o) - radius*radius, t1, t2);
 		
-		if (solutions == 0) {
-			return Optional<float>();
-		} else if (solutions == 1) {
+		if (solutions > 0) {
 			return make_optional<float>(t1);
 		} else {
-			return make_optional<float>(std::min(t1, t2));
+			return Optional<float>();
 		}
+	}
+
+	virtual Optional<Intersection> intersect(const Ray& r) const override {
+		const Ray local_ray = transform.localFromParent * r;
+		const vec3 o = local_ray.origin;
+		const vec3 v = local_ray.direction;
+
+		float t1, t2;
+		const int solutions = solve_quadratic(dot(v, v), 2*dot(o, v), dot(o, o) - radius*radius, t1, t2);
+
+		if (solutions == 0) {
+			return Optional<Intersection>();
+		}
+
+		Intersection i;
+		i.t = t1;
+		i.position = r(t1);
+		i.uv = mvec2(std::atan2(i.position[1], i.position[0]), std::acos(i.position[2] / radius));
+		i.normal = mvec3(transpose(transform.localFromParent) * mvec4(normalized(local_ray(t1)), 0.0f));
+		return make_optional<Intersection>(i);
 	}
 };
 
@@ -63,10 +112,24 @@ struct ShapePlane : SceneShape {
 		: SceneShape(std::move(transform))
 	{}
 
-	virtual Optional<float> intersect(const Ray r) const {
+	virtual Optional<float> hasIntersection(const Ray& r) const override {
 		const Ray local_ray = transform.localFromParent * r;
 		const float t = -local_ray.origin[1] / local_ray.direction[1];
 		return make_optional<float>(t);
+	}
+
+	virtual Optional<Intersection> intersect(const Ray& r) const override {
+		const Ray local_ray = transform.localFromParent * r;
+		const float t = -local_ray.origin[1] / local_ray.direction[1];
+		if (t < 0.0f) {
+			return Optional<Intersection>();
+		}
+		Intersection i;
+		i.t = t;
+		i.position = r(t);
+		i.uv = mvec2(0.0f, 0.0f);
+		i.normal = mvec3(transpose(transform.localFromParent) * mvec4(vec3_y, 0.0f));
+		return make_optional<Intersection>(i);
 	}
 };
 
@@ -123,14 +186,14 @@ private:
 };
 
 Scene setup_scene() {
-	Scene s(Camera(vec3_0, orient(vec3_y, -vec3_z), 0.5f));
+	Scene s(Camera(vec3_0, orient(vec3_y, vec3_z), 0.5f));
 	s.objects.push_back(SceneObject(
 		Material(vec3_1),
-		std::make_unique<ShapeSphere>(TransformPair().translate(vec3_z * -2), 1.0f)
+		std::make_unique<ShapeSphere>(TransformPair().translate(vec3_z * 2), 1.0f)
 		));
 	s.objects.push_back(SceneObject(
 		Material(mvec3(0.5f, 0.0f, 0.0f)),
-		std::make_unique<ShapePlane>(TransformPair().translate(vec3_y * -0.5))
+		std::make_unique<ShapePlane>(TransformPair().translate(vec3_y * -1.5f))
 		));
 
 	return std::move(s);
@@ -140,27 +203,19 @@ static vec2 filmspace_from_screenspace(const vec2 screen_pos, const vec2 screen_
 	return (screen_pos - (screen_size * 0.5f)) * 2.0f * (1.0f / screen_size[1]);
 }
 
-struct Intersection {
-	float t;
-	const SceneObject* object;
-	const SceneShape* shape;
-};
-
 Optional<Intersection> find_nearest_intersection(const Scene& scene, const Ray ray) {
-	Intersection nearest_intersection;
-	nearest_intersection.t = std::numeric_limits<float>::infinity();
+	Optional<Intersection> nearest_intersection;
 
 	for (const SceneObject& object : scene.objects) {
-		const float t = object.shape->intersect(ray).value_or(-1.0f);
-		if (t >= 0 && t < nearest_intersection.t) {
-			nearest_intersection.t = t;
-			nearest_intersection.object = &object;
-			nearest_intersection.shape = object.shape.get();
+		const Optional<Intersection> intersection = object.shape->intersect(ray);
+		if (intersection && (!nearest_intersection || intersection->t < nearest_intersection->t)) {
+			nearest_intersection = intersection;
+			nearest_intersection->object = &object;
+			nearest_intersection->shape = object.shape.get();
 		}
 	}
 	
-	return nearest_intersection.t != std::numeric_limits<float>::infinity() ?
-		make_optional<Intersection>(nearest_intersection) : Optional<Intersection>();
+	return nearest_intersection;
 }
 
 int main(int, char* []) {
@@ -176,7 +231,8 @@ int main(int, char* []) {
 			const Ray camera_ray = scene.camera.createRay(film_coord);
 
 			const Optional<Intersection> hit = find_nearest_intersection(scene, camera_ray);
-			const vec3 color = hit ? hit->object->material.diffuse : vec3_1*0.1f;
+			const vec3 color = hit ? hit->normal * 0.5f + vec3_1 * 0.5f : vec3_1*0.1f;
+			//const vec3 color = hit ? hit->object->material.diffuse : vec3_1*0.1f;
 			
 			image_data[y*IMAGE_WIDTH + x] = color;
 		}
