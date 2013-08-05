@@ -65,10 +65,8 @@ struct SceneShape {
 };
 
 struct ShapeSphere : SceneShape {
-	float radius;
-
-	ShapeSphere(TransformPair transform, float radius)
-		: SceneShape(transform), radius(radius)
+	ShapeSphere(TransformPair transform)
+		: SceneShape(transform)
 	{}
 
 	virtual Optional<float> hasIntersection(const Ray& r) const override {
@@ -77,7 +75,7 @@ struct ShapeSphere : SceneShape {
 		const vec3 v = local_ray.direction;
 
 		float t1, t2;
-		const int solutions = solve_quadratic(dot(v, v), 2*dot(o, v), dot(o, o) - radius*radius, t1, t2);
+		const int solutions = solve_quadratic(dot(v, v), 2*dot(o, v), dot(o, o) - 1.0f, t1, t2);
 		
 		if (solutions > 0) {
 			return make_optional<float>(t1);
@@ -92,7 +90,7 @@ struct ShapeSphere : SceneShape {
 		const vec3 v = local_ray.direction;
 
 		float t1, t2;
-		const int solutions = solve_quadratic(dot(v, v), 2*dot(o, v), dot(o, o) - radius*radius, t1, t2);
+		const int solutions = solve_quadratic(dot(v, v), 2*dot(o, v), dot(o, o) - 1.0f, t1, t2);
 
 		if (solutions == 0) {
 			return Optional<Intersection>();
@@ -102,7 +100,7 @@ struct ShapeSphere : SceneShape {
 		i.t = t1;
 		i.position = r(t1);
 		vec3 local_pos = local_ray(t1);
-		i.uv = mvec2(std::atan2(local_pos[2], local_pos[0]) / pi + 1.0f, std::acos(local_pos[1] / radius) / pi);
+		i.uv = mvec2(std::atan2(local_pos[2], local_pos[0]) / (2*pi) + 0.5f, std::acos(local_pos[1]) / pi);
 		i.normal = mvec3(transpose(transform.localFromParent) * mvec4(normalized(local_ray(t1)), 0.0f));
 		return make_optional<Intersection>(i);
 	}
@@ -190,7 +188,7 @@ Scene setup_scene() {
 	Scene s(Camera(vec3_0, orient(vec3_y, vec3_z), 0.5f));
 	s.objects.push_back(SceneObject(
 		Material(vec3_1),
-		std::make_unique<ShapeSphere>(TransformPair().translate(vec3_z * 2), 1.0f)
+		std::make_unique<ShapeSphere>(TransformPair().translate(vec3_z * 2))
 		));
 	s.objects.push_back(SceneObject(
 		Material(mvec3(0.5f, 0.0f, 0.0f)),
