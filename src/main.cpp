@@ -231,6 +231,18 @@ Optional<Intersection> find_nearest_intersection(const Scene& scene, const Ray r
 	return nearest_intersection;
 }
 
+bool find_any_intersection(const Scene& scene, const Ray& ray, float max_t) {
+	for (const SceneObject& object : scene.objects) {
+		if (object.shape->hasIntersection(ray, max_t)) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+static const float RAY_EPSILON = 1e-6f;
+
 int main(int, char* []) {
 	static const int IMAGE_WIDTH = 1280;
 	static const int IMAGE_HEIGHT = 720;
@@ -248,8 +260,10 @@ int main(int, char* []) {
 			const Optional<Intersection> surface_hit = find_nearest_intersection(scene, camera_ray);
 			if (surface_hit) {
 				for (const SceneLight& light : scene.lights) {
-					const vec3 light_dir = normalized(light.origin - surface_hit->position);
-					color += surface_hit->object->material.diffuse * dot(light_dir, surface_hit->normal);
+					const vec3 light_dir = light.origin - surface_hit->position;
+					if (!find_any_intersection(scene, Ray{surface_hit->position + light_dir * RAY_EPSILON, light_dir}, 1.0f)) {
+						color += surface_hit->object->material.diffuse * std::max(0.0f, dot(normalized(light_dir), surface_hit->normal));
+					}
 				}
 			} else {
 				color = vec3_1 * 0.1f;
