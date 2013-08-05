@@ -151,6 +151,10 @@ private:
 struct SceneLight {
 	vec3 origin;
 	vec3 intensity;
+
+	SceneLight(const vec3& origin, const vec3& intensity)
+		: origin(origin), intensity(intensity)
+	{}
 };
 
 float focal_distance_from_fov(const float fov_degrees) {
@@ -176,13 +180,14 @@ struct Camera {
 struct Scene {
 	Camera camera;
 	std::vector<SceneObject> objects;
+	std::vector<SceneLight> lights;
 
 	Scene(Camera camera)
 		: camera(camera)
 	{}
 
 	Scene(Scene&& o)
-		: camera(std::move(o.camera)), objects(std::move(o.objects))
+		: camera(std::move(o.camera)), objects(std::move(o.objects)), lights(std::move(o.lights))
 	{}
 
 private:
@@ -190,15 +195,17 @@ private:
 };
 
 Scene setup_scene() {
-	Scene s(Camera(vec3_0, orient(vec3_y, vec3_z), 75.0f));
+	Scene s(Camera(vec3_0, orient(vec3_y, -vec3_z), 75.0f));
 	s.objects.push_back(SceneObject(
 		Material(vec3_1),
-		std::make_unique<ShapeSphere>(TransformPair().translate(vec3_z * 2))
+		std::make_unique<ShapeSphere>(TransformPair().translate(mvec3(0.0f, 0.0f, -5.0f)))
 		));
 	s.objects.push_back(SceneObject(
 		Material(mvec3(0.5f, 0.0f, 0.0f)),
-		std::make_unique<ShapePlane>(TransformPair().translate(vec3_y * -1.5f))
+		std::make_unique<ShapePlane>(TransformPair().translate(vec3_y * -1.0f))
 		));
+
+	s.lights.push_back(SceneLight(mvec3(-3.0f, 6.0f, 1.0f), vec3_1));
 
 	return std::move(s);
 }
@@ -234,9 +241,17 @@ int main(int, char* []) {
 			const vec2 film_coord = filmspace_from_screenspace(mvec2(float(x), float(y)), mvec2(float(IMAGE_WIDTH), float(IMAGE_HEIGHT))) * mvec2(1.0f, -1.0f);
 			const Ray camera_ray = scene.camera.createRay(film_coord);
 
-			const Optional<Intersection> hit = find_nearest_intersection(scene, camera_ray);
-			const vec3 color = hit ? hit->normal * 0.5f + vec3_1 * 0.5f : vec3_1*0.1f;
-			//const vec3 color = hit ? hit->object->material.diffuse : vec3_1*0.1f;
+			vec3 color = vec3_0;
+
+			const Optional<Intersection> surface_hit = find_nearest_intersection(scene, camera_ray);
+			if (surface_hit) {
+				for (const SceneLight& light : scene.lights) {
+					const vec3 light_dir = normalized(light.origin - surface_hit->position);
+					color += surface_hit->object->material.diffuse * dot(light_dir, surface_hit->normal);
+				}
+			} else {
+				color = vec3_1 * 0.1f;
+			}
 			
 			image_data[y*IMAGE_WIDTH + x] = color;
 		}
