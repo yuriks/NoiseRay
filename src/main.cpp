@@ -4,6 +4,7 @@
 #include "math/Sphere.hpp"
 #include "math/misc.hpp"
 #include "math/Ray.hpp"
+#include "math/TransformPair.hpp"
 #include "noncopyable.hpp"
 #include "output.hpp"
 #include "Optional.hpp"
@@ -32,22 +33,29 @@ struct Plane {
 };
 
 struct SceneShape {
+	TransformPair transform;
+
+	SceneShape(TransformPair transform)
+		: transform(std::move(transform))
+	{}
+
 	virtual Optional<float> intersect(const Ray r) const = 0;
 };
 
 struct ShapeSphere : SceneShape {
-	Sphere sphere;
+	float radius;
 
-	ShapeSphere(vec3 origin, float radius)
-		: sphere(origin, radius)
+	ShapeSphere(TransformPair transform, float radius)
+		: SceneShape(transform), radius(radius)
 	{}
 
 	virtual Optional<float> intersect(const Ray r) const {
-		const vec3 o = r.origin - sphere.origin;
-		const vec3 v = r.direction;
+		const Ray local_ray = transform.localFromParent * r;
+		const vec3 o = local_ray.origin;
+		const vec3 v = local_ray.direction;
 
 		float t1, t2;
-		const int solutions = solve_quadratic(dot(v, v), 2*dot(o, v), dot(o, o) - sphere.radius*sphere.radius, t1, t2);
+		const int solutions = solve_quadratic(dot(v, v), 2*dot(o, v), dot(o, o) - radius*radius, t1, t2);
 		
 		if (solutions == 0) {
 			return Optional<float>();
@@ -60,14 +68,13 @@ struct ShapeSphere : SceneShape {
 };
 
 struct ShapePlane : SceneShape {
-	Plane plane;
-
-	ShapePlane(vec3 normal, float distance)
-		: plane(normal, distance)
+	ShapePlane(TransformPair transform)
+		: SceneShape(std::move(transform))
 	{}
 
 	virtual Optional<float> intersect(const Ray r) const {
-		const float t = (plane.distance - dot(r.origin, plane.normal)) / dot(r.direction, plane.normal);
+		const Ray local_ray = transform.localFromParent * r;
+		const float t = -local_ray.origin[1] / local_ray.direction[1];
 		return make_optional<float>(t);
 	}
 };
@@ -128,11 +135,11 @@ Scene setup_scene() {
 	Scene s(Camera(vec3_0, orient(vec3_y, -vec3_z), 0.5f));
 	s.objects.push_back(SceneObject(
 		Material(vec3_1),
-		std::make_unique<ShapeSphere>(mvec3(0.0f, 0.0f, -2.0f), 1.0f)
+		std::make_unique<ShapeSphere>(TransformPair().translate(vec3_z * -2), 1.0f)
 		));
 	s.objects.push_back(SceneObject(
 		Material(mvec3(0.5f, 0.0f, 0.0f)),
-		std::make_unique<ShapePlane>(vec3_y, -1.0f)
+		std::make_unique<ShapePlane>(TransformPair().translate(vec3_y * -0.5))
 		));
 
 	return std::move(s);
