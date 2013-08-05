@@ -239,5 +239,5 @@ int main(int, char* []) {
 		}
 	}
 
-	save_image(image_data, IMAGE_WIDTH, IMAGE_HEIGHT);
+	save_srgb_image(image_data, IMAGE_WIDTH, IMAGE_HEIGHT);
 }

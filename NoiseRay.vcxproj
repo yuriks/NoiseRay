@@ -97,6 +97,7 @@
     <ClInclude Include="libyuriks\math\vec.hpp" />
     <ClInclude Include="libyuriks\Optional.hpp" />
     <ClInclude Include="libyuriks\output.hpp" />
+    <ClInclude Include="libyuriks\srgb.hpp" />
     <ClInclude Include="libyuriks\stb_image_write.h" />
     <ClInclude Include="libyuriks\noncopyable.hpp" />
     <ClInclude Include="libyuriks\util.hpp" />
