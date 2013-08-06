@@ -17,9 +17,10 @@ using namespace yks;
 
 struct Material {
 	vec3 diffuse;
+	vec3 specular;
 
-	Material(vec3 diffuse)
-		: diffuse(diffuse)
+	Material(vec3 diffuse, vec3 specular)
+		: diffuse(diffuse), specular(specular)
 	{}
 };
 
@@ -197,17 +198,21 @@ private:
 };
 
 Scene setup_scene() {
-	Scene s(Camera(vec3_0, orient(vec3_y, -vec3_z), 75.0f));
+	Scene s(Camera(vec3_y * 0.2, orient(vec3_y, -vec3_z), 75.0f));
 	s.objects.push_back(SceneObject(
-		Material(vec3_1),
+		Material(vec3_1 * 0.0f, vec3_x * 1.0f + (vec3_y + vec3_z)*0.4f),
 		std::make_unique<ShapeSphere>(TransformPair().translate(mvec3(0.0f, 0.0f, -5.0f)))
 		));
 	s.objects.push_back(SceneObject(
-		Material(mvec3(0.5f, 0.0f, 0.0f)),
+		Material(vec3_x, vec3_0),
+		std::make_unique<ShapeSphere>(TransformPair().scale(0.25f).translate(mvec3(-0.5f, 1.5f, -3.0f)))
+		));
+	s.objects.push_back(SceneObject(
+		Material(mvec3(0.5f, 0.0f, 0.0f)*0, vec3_1),
 		std::make_unique<ShapePlane>(TransformPair().translate(vec3_y * -1.0f))
 		));
 
-	s.lights.push_back(SceneLight(mvec3(-3.0f, 6.0f, 1.0f), vec3_1));
+	s.lights.push_back(SceneLight(mvec3(-2.0f, 4.0f, -4.0f), vec3_1 * 10));
 
 	return std::move(s);
 }
@@ -241,7 +246,39 @@ bool find_any_intersection(const Scene& scene, const Ray& ray, float max_t) {
 	return false;
 }
 
+vec3 reflect(const vec3& l, const vec3& n) {
+	return l + 2*dot(n, -l) * n;
+}
+
+bool checkerboard(vec3 pos) {
+	pos = pos * 5;
+	return int(pos[0]) % 2 == int(pos[2]) % 2;
+}
+
 static const float RAY_EPSILON = 1e-6f;
+
+vec3 calc_light_incidence(const Scene& scene, const Ray& ray, int remaining_depth) {
+	vec3 color = vec3_0;
+
+	const Optional<Intersection> surface_hit = find_nearest_intersection(scene, ray);
+	if (surface_hit) {
+		for (const SceneLight& light : scene.lights) {
+			const vec3 light_dir = light.origin - surface_hit->position;
+			if (!find_any_intersection(scene, Ray{surface_hit->position + surface_hit->normal * RAY_EPSILON, light_dir}, 1.0f)) {
+				const vec3 albedo = checkerboard(surface_hit->position) ? surface_hit->object->material.diffuse : vec3_1;
+				color += albedo * std::max(0.0f, dot(normalized(light_dir), surface_hit->normal)) * (light.intensity * (1.0f / dot(light_dir, light_dir)));
+			}
+		}
+		if (remaining_depth > 0 && surface_hit->object->material.specular != vec3_0) {
+			const vec3 specular_reflectance = surface_hit->object->material.specular;
+			color += specular_reflectance * calc_light_incidence(scene, Ray{surface_hit->position + surface_hit->normal * RAY_EPSILON, reflect(normalized(ray.direction), surface_hit->normal)}, remaining_depth-1);
+		}
+	} else {
+		color = vec3_1 * 0.1f;
+	}
+
+	return color;
+}
 
 int main(int, char* []) {
 	static const int IMAGE_WIDTH = 1280;
@@ -254,22 +291,8 @@ int main(int, char* []) {
 		for (int x = 0; x < IMAGE_WIDTH; x++) {
 			const vec2 film_coord = filmspace_from_screenspace(mvec2(float(x), float(y)), mvec2(float(IMAGE_WIDTH), float(IMAGE_HEIGHT))) * mvec2(1.0f, -1.0f);
 			const Ray camera_ray = scene.camera.createRay(film_coord);
-
-			vec3 color = vec3_0;
-
-			const Optional<Intersection> surface_hit = find_nearest_intersection(scene, camera_ray);
-			if (surface_hit) {
-				for (const SceneLight& light : scene.lights) {
-					const vec3 light_dir = light.origin - surface_hit->position;
-					if (!find_any_intersection(scene, Ray{surface_hit->position + light_dir * RAY_EPSILON, light_dir}, 1.0f)) {
-						color += surface_hit->object->material.diffuse * std::max(0.0f, dot(normalized(light_dir), surface_hit->normal));
-					}
-				}
-			} else {
-				color = vec3_1 * 0.1f;
-			}
 			
-			image_data[y*IMAGE_WIDTH + x] = color;
+			image_data[y*IMAGE_WIDTH + x] = calc_light_incidence(scene, camera_ray, 5);
 		}
 	}
 
