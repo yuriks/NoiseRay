@@ -15,15 +15,6 @@
 
 using namespace yks;
 
-struct Material {
-	vec3 diffuse;
-	vec3 specular;
-
-	Material(vec3 diffuse, vec3 specular)
-		: diffuse(diffuse), specular(specular)
-	{}
-};
-
 struct SceneObject;
 struct SceneShape;
 
@@ -35,6 +26,81 @@ struct Intersection {
 
 	const SceneObject* object;
 	const SceneShape* shape;
+};
+
+struct MaterialTexture {
+	virtual vec3 getValue(const Intersection& i) const = 0;
+};
+
+struct TextureSolid : MaterialTexture {
+	vec3 value;
+
+	TextureSolid(const vec3& value)
+		: value(value)
+	{}
+
+	TextureSolid(float r, float g, float b)
+		: value(mvec3(r, g, b))
+	{}
+
+	virtual vec3 getValue(const Intersection& i) const override {
+		(void)i;
+		return value;
+	}
+};
+
+struct TextureCheckerboard : MaterialTexture {
+	std::shared_ptr<MaterialTexture> tex_a;
+	std::shared_ptr<MaterialTexture> tex_b;
+
+	TextureCheckerboard(const std::shared_ptr<MaterialTexture>& tex_a, const std::shared_ptr<MaterialTexture>& tex_b)
+		: tex_a(tex_a), tex_b(tex_b)
+	{}
+
+	virtual vec3 getValue(const Intersection& i) const override {
+		bool x = i.uv[0] - std::floor(i.uv[0]) < 0.5f;
+		bool y = i.uv[1] - std::floor(i.uv[1]) < 0.5f;
+		return x != y ? tex_a->getValue(i) : tex_b->getValue(i);
+	}
+};
+
+struct TexMapScale : MaterialTexture {
+	std::shared_ptr<MaterialTexture> tex;
+	mat<2,3> map;
+
+	TexMapScale(const std::shared_ptr<MaterialTexture>& tex, const mat<2,3>& map)
+		: tex(tex), map(map)
+	{}
+
+	virtual vec3 getValue(const Intersection& i) const override {
+		Intersection mapped_i = i;
+		mapped_i.uv = map * mvec3(i.uv[0], i.uv[1], 1.0f);
+		return tex->getValue(mapped_i);
+	}
+};
+
+struct TexMapFromPosition : MaterialTexture {
+	std::shared_ptr<MaterialTexture> tex;
+	mat<2,4> map;
+
+	TexMapFromPosition(const std::shared_ptr<MaterialTexture>& tex, const mat<2, 4>& map)
+		: tex(tex), map(map)
+	{}
+
+	virtual vec3 getValue(const Intersection& i) const override {
+		Intersection mapped_i = i;
+		mapped_i.uv = map * mvec4(i.position, 1.0f);
+		return tex->getValue(mapped_i);
+	}
+};
+
+struct Material {
+	std::shared_ptr<MaterialTexture> diffuse;
+	std::shared_ptr<MaterialTexture> specular;
+
+	Material(const std::shared_ptr<MaterialTexture>& diffuse, const std::shared_ptr<MaterialTexture>& specular)
+		: diffuse(diffuse), specular(specular)
+	{}
 };
 
 struct SceneShape {
@@ -198,17 +264,28 @@ private:
 };
 
 Scene setup_scene() {
+	const auto black = std::make_shared<TextureSolid>(vec3_0);
+	const auto white = std::make_shared<TextureSolid>(vec3_1);
+	const auto red = std::make_shared<TextureSolid>(vec3_x);
+
 	Scene s(Camera(vec3_y * 0.2, orient(vec3_y, -vec3_z), 75.0f));
 	s.objects.push_back(SceneObject(
-		Material(vec3_1 * 0.0f, vec3_x * 1.0f + (vec3_y + vec3_z)*0.4f),
+		Material(black, std::make_shared<TextureSolid>(1.0f, 0.4f, 0.4f)),
 		std::make_unique<ShapeSphere>(TransformPair().translate(mvec3(0.0f, 0.0f, -5.0f)))
 		));
 	s.objects.push_back(SceneObject(
-		Material(vec3_x, vec3_0),
+		Material(white, black),
 		std::make_unique<ShapeSphere>(TransformPair().scale(0.25f).translate(mvec3(-0.5f, 1.5f, -3.0f)))
 		));
+
+	const mat<2, 4> plane_tex_mapping = {{
+		1, 0, 0, 0,
+		0, 0, 1, 0
+	}};
+	const auto checkerboard = std::make_shared<TextureCheckerboard>(white, red);
+
 	s.objects.push_back(SceneObject(
-		Material(mvec3(0.5f, 0.0f, 0.0f)*0, vec3_1),
+		Material(std::make_shared<TexMapFromPosition>(checkerboard, plane_tex_mapping), white),
 		std::make_unique<ShapePlane>(TransformPair().translate(vec3_y * -1.0f))
 		));
 
@@ -250,11 +327,6 @@ vec3 reflect(const vec3& l, const vec3& n) {
 	return l + 2*dot(n, -l) * n;
 }
 
-bool checkerboard(vec3 pos) {
-	pos = pos * 5;
-	return int(pos[0]) % 2 == int(pos[2]) % 2;
-}
-
 static const float RAY_EPSILON = 1e-6f;
 
 vec3 calc_light_incidence(const Scene& scene, const Ray& ray, int remaining_depth) {
@@ -265,16 +337,19 @@ vec3 calc_light_incidence(const Scene& scene, const Ray& ray, int remaining_dept
 		for (const SceneLight& light : scene.lights) {
 			const vec3 light_dir = light.origin - surface_hit->position;
 			if (!find_any_intersection(scene, Ray{surface_hit->position + surface_hit->normal * RAY_EPSILON, light_dir}, 1.0f)) {
-				const vec3 albedo = checkerboard(surface_hit->position) ? surface_hit->object->material.diffuse : vec3_1;
+				const vec3 albedo = surface_hit->object->material.diffuse->getValue(*surface_hit);
 				color += albedo * std::max(0.0f, dot(normalized(light_dir), surface_hit->normal)) * (light.intensity * (1.0f / dot(light_dir, light_dir)));
 			}
 		}
-		if (remaining_depth > 0 && surface_hit->object->material.specular != vec3_0) {
-			const vec3 specular_reflectance = surface_hit->object->material.specular;
+
+		const vec3 specular_reflectance = surface_hit->object->material.specular->getValue(*surface_hit);
+		if (remaining_depth > 0 && specular_reflectance != vec3_0) {
 			color += specular_reflectance * calc_light_incidence(scene, Ray{surface_hit->position + surface_hit->normal * RAY_EPSILON, reflect(normalized(ray.direction), surface_hit->normal)}, remaining_depth-1);
+		} else {
+			color += specular_reflectance * 0.5f;
 		}
 	} else {
-		color = vec3_1 * 0.1f;
+		color = vec3_0;
 	}
 
 	return color;
