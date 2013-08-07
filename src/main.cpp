@@ -1,205 +1,30 @@
-#include "math/vec.hpp"
-#include "math/mat.hpp"
 #include "math/MatrixTransform.hpp"
-#include "math/Sphere.hpp"
-#include "math/misc.hpp"
 #include "math/Ray.hpp"
+#include "math/Sphere.hpp"
 #include "math/TransformPair.hpp"
-#include "noncopyable.hpp"
-#include "output.hpp"
+#include "math/mat.hpp"
+#include "math/misc.hpp"
+#include "math/vec.hpp"
 #include "Optional.hpp"
-#include <vector>
-#include <memory>
+#include "noncopyable.hpp"
+
+#include "materials/Material.hpp"
+#include "materials/TextureCheckerboard.hpp"
+#include "materials/TextureSolid.hpp"
+#include "materials/texture_mappings.hpp"
+
+#include "shapes/SceneShape.hpp"
+#include "shapes/ShapeSphere.hpp"
+#include "shapes/ShapePlane.hpp"
+
+#include "output.hpp"
+
 #include <algorithm>
 #include <limits>
+#include <memory>
+#include <vector>
 
 using namespace yks;
-
-struct SceneObject;
-struct SceneShape;
-
-struct Intersection {
-	float t;
-	vec3 position;
-	vec3 normal;
-	vec2 uv;
-
-	const SceneObject* object;
-	const SceneShape* shape;
-};
-
-struct MaterialTexture {
-	virtual vec3 getValue(const Intersection& i) const = 0;
-};
-
-struct TextureSolid : MaterialTexture {
-	vec3 value;
-
-	TextureSolid(const vec3& value)
-		: value(value)
-	{}
-
-	TextureSolid(float r, float g, float b)
-		: value(mvec3(r, g, b))
-	{}
-
-	virtual vec3 getValue(const Intersection& i) const override {
-		(void)i;
-		return value;
-	}
-};
-
-struct TextureCheckerboard : MaterialTexture {
-	std::shared_ptr<MaterialTexture> tex_a;
-	std::shared_ptr<MaterialTexture> tex_b;
-
-	TextureCheckerboard(const std::shared_ptr<MaterialTexture>& tex_a, const std::shared_ptr<MaterialTexture>& tex_b)
-		: tex_a(tex_a), tex_b(tex_b)
-	{}
-
-	virtual vec3 getValue(const Intersection& i) const override {
-		bool x = i.uv[0] - std::floor(i.uv[0]) < 0.5f;
-		bool y = i.uv[1] - std::floor(i.uv[1]) < 0.5f;
-		return x != y ? tex_a->getValue(i) : tex_b->getValue(i);
-	}
-};
-
-struct TexMapScale : MaterialTexture {
-	std::shared_ptr<MaterialTexture> tex;
-	mat<2,3> map;
-
-	TexMapScale(const std::shared_ptr<MaterialTexture>& tex, const mat<2,3>& map)
-		: tex(tex), map(map)
-	{}
-
-	virtual vec3 getValue(const Intersection& i) const override {
-		Intersection mapped_i = i;
-		mapped_i.uv = map * mvec3(i.uv[0], i.uv[1], 1.0f);
-		return tex->getValue(mapped_i);
-	}
-};
-
-struct TexMapFromPosition : MaterialTexture {
-	std::shared_ptr<MaterialTexture> tex;
-	mat<2,4> map;
-
-	TexMapFromPosition(const std::shared_ptr<MaterialTexture>& tex, const mat<2, 4>& map)
-		: tex(tex), map(map)
-	{}
-
-	virtual vec3 getValue(const Intersection& i) const override {
-		Intersection mapped_i = i;
-		mapped_i.uv = map * mvec4(i.position, 1.0f);
-		return tex->getValue(mapped_i);
-	}
-};
-
-struct Material {
-	std::shared_ptr<MaterialTexture> diffuse;
-	std::shared_ptr<MaterialTexture> specular;
-
-	Material(const std::shared_ptr<MaterialTexture>& diffuse, const std::shared_ptr<MaterialTexture>& specular)
-		: diffuse(diffuse), specular(specular)
-	{}
-};
-
-struct SceneShape {
-	TransformPair transform;
-
-	SceneShape(TransformPair transform)
-		: transform(std::move(transform))
-	{}
-
-	virtual Optional<float> hasIntersection(const Ray& r) const = 0;
-
-	Optional<float> hasIntersection(const Ray& r, float max_t) const {
-		const Optional<float> t = hasIntersection(r);
-		if (t && *t > max_t) {
-			return Optional<float>();
-		}
-		return t;
-	}
-
-	virtual Optional<Intersection> intersect(const Ray& r) const = 0;
-
-	Optional<Intersection> intersect(const Ray& r, float max_t) const {
-		const Optional<Intersection> intersection = intersect(r);
-		if (intersection && intersection->t > max_t) {
-			return Optional<Intersection>();
-		}
-		return intersection;
-	}
-};
-
-struct ShapeSphere : SceneShape {
-	ShapeSphere(TransformPair transform)
-		: SceneShape(transform)
-	{}
-
-	virtual Optional<float> hasIntersection(const Ray& r) const override {
-		const Ray local_ray = transform.localFromParent * r;
-		const vec3 o = local_ray.origin;
-		const vec3 v = local_ray.direction;
-
-		float t1, t2;
-		const int solutions = solve_quadratic(dot(v, v), 2*dot(o, v), dot(o, o) - 1.0f, t1, t2);
-		
-		if (solutions == 0 || t1 < 0.0f) {
-			return Optional<float>();
-		}
-		return make_optional<float>(t1);
-	}
-
-	virtual Optional<Intersection> intersect(const Ray& r) const override {
-		const Ray local_ray = transform.localFromParent * r;
-		const vec3 o = local_ray.origin;
-		const vec3 v = local_ray.direction;
-
-		float t1, t2;
-		const int solutions = solve_quadratic(dot(v, v), 2*dot(o, v), dot(o, o) - 1.0f, t1, t2);
-
-		if (solutions == 0 || t1 < 0.0f) {
-			return Optional<Intersection>();
-		}
-
-		Intersection i;
-		i.t = t1;
-		i.position = r(t1);
-		vec3 local_pos = local_ray(t1);
-		i.uv = mvec2(std::atan2(local_pos[2], local_pos[0]) / (2*pi) + 0.5f, std::acos(local_pos[1]) / pi);
-		i.normal = mvec3(transpose(transform.localFromParent) * mvec4(normalized(local_ray(t1)), 0.0f));
-		return make_optional<Intersection>(i);
-	}
-};
-
-struct ShapePlane : SceneShape {
-	ShapePlane(TransformPair transform)
-		: SceneShape(std::move(transform))
-	{}
-
-	virtual Optional<float> hasIntersection(const Ray& r) const override {
-		const Ray local_ray = transform.localFromParent * r;
-		const float t = -local_ray.origin[1] / local_ray.direction[1];
-		if (t < 0.0f) {
-			return Optional<float>();
-		}
-		return make_optional<float>(t);
-	}
-
-	virtual Optional<Intersection> intersect(const Ray& r) const override {
-		const Ray local_ray = transform.localFromParent * r;
-		const float t = -local_ray.origin[1] / local_ray.direction[1];
-		if (t < 0.0f) {
-			return Optional<Intersection>();
-		}
-		Intersection i;
-		i.t = t;
-		i.position = r(t);
-		i.uv = mvec2(0.0f, 0.0f);
-		i.normal = mvec3(transpose(transform.localFromParent) * mvec4(vec3_y, 0.0f));
-		return make_optional<Intersection>(i);
-	}
-};
 
 struct SceneObject {
 	Material material;

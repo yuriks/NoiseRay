@@ -81,6 +81,8 @@
     <ClCompile Include="src\output.cpp" />
     <ClCompile Include="libyuriks\stb_image_write.cpp" />
     <ClCompile Include="src\main.cpp" />
+    <ClCompile Include="src\shapes\ShapePlane.cpp" />
+    <ClCompile Include="src\shapes\ShapeSphere.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="libyuriks\math\mat.hpp" />
@@ -92,11 +94,18 @@
     <ClInclude Include="libyuriks\math\TransformPair.hpp" />
     <ClInclude Include="libyuriks\math\vec.hpp" />
     <ClInclude Include="libyuriks\Optional.hpp" />
+    <ClInclude Include="src\materials\Material.hpp" />
+    <ClInclude Include="src\materials\TextureCheckerboard.hpp" />
+    <ClInclude Include="src\materials\TextureSolid.hpp" />
+    <ClInclude Include="src\materials\texture_mappings.hpp" />
     <ClInclude Include="src\output.hpp" />
     <ClInclude Include="libyuriks\srgb.hpp" />
     <ClInclude Include="libyuriks\stb_image_write.h" />
     <ClInclude Include="libyuriks\noncopyable.hpp" />
     <ClInclude Include="libyuriks\util.hpp" />
+    <ClInclude Include="src\shapes\SceneShape.hpp" />
+    <ClInclude Include="src\shapes\ShapePlane.hpp" />
+    <ClInclude Include="src\shapes\ShapeSphere.hpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include=".gitignore" />
