@@ -23,8 +23,27 @@
 #include <limits>
 #include <memory>
 #include <vector>
+#include <random>
 
 using namespace yks;
+
+struct Rng {
+	std::mt19937 engine;
+	std::uniform_real_distribution<float> canonical_distribution; // std::generate_canonical is broken in VS2013
+
+	Rng() {
+		static const uint32_t seed_seq[] = {
+			0x4587ba0e, 0xad01370f, 0xdd817882, 0xdc98c4aa,
+			0x4cbf0235, 0x7dba82eb, 0xea593627, 0x597e5052
+		};
+		std::seed_seq seq(std::begin(seed_seq), std::end(seed_seq));
+		engine.seed(seq);
+	}
+
+	float canonical() {
+		return canonical_distribution(engine);
+	}
+};
 
 struct SceneObject {
 	Material material;
@@ -45,10 +64,23 @@ private:
 struct SceneLight {
 	vec3 origin;
 	vec3 intensity;
+	float radius;
 
-	SceneLight(const vec3& origin, const vec3& intensity)
-		: origin(origin), intensity(intensity)
+	// Emittance = Power / (4*pi*radius^2)
+	// Intensity = Emittance / 2*pi
+	SceneLight(const vec3& origin, const vec3& total_power, float radius)
+		: origin(origin), intensity(total_power * (1.0f / (2*radius*radius))), radius(radius)
 	{}
+
+	vec3 samplePoint(Rng& rng) const {
+		const float a = rng.canonical();
+		const float b = rng.canonical();
+		return uniform_point_on_sphere(a, b) * radius + origin;
+	}
+
+	vec3 calcIntensity(const vec3& point, const vec3& direction) const {
+		return dot(point - origin, direction) >= 0.0f ? intensity : vec3_0;
+	}
 };
 
 float focal_distance_from_fov(const float fov_degrees) {
@@ -114,7 +146,7 @@ Scene setup_scene() {
 		std::make_unique<ShapePlane>(TransformPair().translate(vec3_y * -1.0f))
 		));
 
-	s.lights.push_back(SceneLight(mvec3(-2.0f, 4.0f, -4.0f), vec3_1 * 10));
+	s.lights.push_back(SceneLight(mvec3(-2.0f, 4.0f, -4.0f), vec3_1 * 40, 1));
 
 	return std::move(s);
 }
@@ -154,22 +186,24 @@ vec3 reflect(const vec3& l, const vec3& n) {
 
 static const float RAY_EPSILON = 1e-6f;
 
-vec3 calc_light_incidence(const Scene& scene, const Ray& ray, int remaining_depth) {
+vec3 calc_light_incidence(const Scene& scene, Rng& rng, const Ray& ray, int remaining_depth) {
 	vec3 color = vec3_0;
 
 	const Optional<Intersection> surface_hit = find_nearest_intersection(scene, ray);
 	if (surface_hit) {
 		for (const SceneLight& light : scene.lights) {
-			const vec3 light_vec = light.origin - surface_hit->position;
+			const vec3 light_sample = light.samplePoint(rng);
+			const vec3 light_vec = light_sample - surface_hit->position;
+
 			if (!find_any_intersection(scene, Ray{surface_hit->position + surface_hit->normal * RAY_EPSILON, light_vec}, 1.0f)) {
 				const vec3 albedo = surface_hit->object->material.diffuse->getValue(*surface_hit);
-				color += albedo * std::max(0.0f, dot(normalized(light_vec), surface_hit->normal)) * (light.intensity * (1.0f / dot(light_vec, light_vec)));
+				color += albedo * std::max(0.0f, dot(normalized(light_vec), surface_hit->normal)) * (light.calcIntensity(light_sample, -light_vec) * (1.0f / dot(light_vec, light_vec)));
 			}
 		}
 
 		const vec3 specular_reflectance = surface_hit->object->material.specular->getValue(*surface_hit);
 		if (remaining_depth > 0 && specular_reflectance != vec3_0) {
-			color += specular_reflectance * calc_light_incidence(scene, Ray{surface_hit->position + surface_hit->normal * RAY_EPSILON, reflect(normalized(ray.direction), surface_hit->normal)}, remaining_depth-1);
+			color += specular_reflectance * calc_light_incidence(scene, rng, Ray{surface_hit->position + surface_hit->normal * RAY_EPSILON, reflect(normalized(ray.direction), surface_hit->normal)}, remaining_depth-1);
 		} else {
 			color += specular_reflectance * 0.5f;
 		}
@@ -186,13 +220,14 @@ int main(int, char* []) {
 	std::vector<vec3> image_data(IMAGE_WIDTH * IMAGE_HEIGHT);
 
 	const Scene scene = setup_scene();
+	Rng rng;
 
 	for (int y = 0; y < IMAGE_HEIGHT; ++y) {
 		for (int x = 0; x < IMAGE_WIDTH; x++) {
 			const vec2 film_coord = filmspace_from_screenspace(mvec2(float(x), float(y)), mvec2(float(IMAGE_WIDTH), float(IMAGE_HEIGHT))) * mvec2(1.0f, -1.0f);
 			const Ray camera_ray = scene.camera.createRay(film_coord);
 			
-			image_data[y*IMAGE_WIDTH + x] = calc_light_incidence(scene, camera_ray, 5);
+			image_data[y*IMAGE_WIDTH + x] = calc_light_incidence(scene, rng, camera_ray, 5);
 		}
 	}
 
