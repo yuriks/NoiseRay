@@ -160,10 +160,10 @@ vec3 calc_light_incidence(const Scene& scene, const Ray& ray, int remaining_dept
 	const Optional<Intersection> surface_hit = find_nearest_intersection(scene, ray);
 	if (surface_hit) {
 		for (const SceneLight& light : scene.lights) {
-			const vec3 light_dir = light.origin - surface_hit->position;
-			if (!find_any_intersection(scene, Ray{surface_hit->position + surface_hit->normal * RAY_EPSILON, light_dir}, 1.0f)) {
+			const vec3 light_vec = light.origin - surface_hit->position;
+			if (!find_any_intersection(scene, Ray{surface_hit->position + surface_hit->normal * RAY_EPSILON, light_vec}, 1.0f)) {
 				const vec3 albedo = surface_hit->object->material.diffuse->getValue(*surface_hit);
-				color += albedo * std::max(0.0f, dot(normalized(light_dir), surface_hit->normal)) * (light.intensity * (1.0f / dot(light_dir, light_dir)));
+				color += albedo * std::max(0.0f, dot(normalized(light_vec), surface_hit->normal)) * (light.intensity * (1.0f / dot(light_vec, light_vec)));
 			}
 		}
 
