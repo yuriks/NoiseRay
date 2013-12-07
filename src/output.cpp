@@ -2,6 +2,8 @@
 #include <cmath>
 #include <cstdint>
 #include <vector>
+#include <ctime>
+#include <cstdio>
 #include "math/vec.hpp"
 #include "stb_image_write.h"
 #include "util.hpp"
@@ -21,7 +23,14 @@ static std::vector<uint8_t> encode_srgb(const std::vector<yks::vec3> fdata) {
 
 void save_srgb_image(const std::vector<yks::vec3>& pixels, int width, int height) {
 	std::vector<uint8_t> image_byte_data = encode_srgb(pixels);
-	stbi_write_png("output.png", width, height, 3, image_byte_data.data(), 0);
+
+	std::time_t t = std::time(nullptr);
+	std::tm* tm = std::localtime(&t);
+
+	char buffer[64];
+	std::sprintf(buffer, "%04d-%02d-%02d_%02d-%02d_output.png", tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday, tm->tm_hour, tm->tm_min);
+
+	stbi_write_png(buffer, width, height, 3, image_byte_data.data(), 0);
 }
 
 }
