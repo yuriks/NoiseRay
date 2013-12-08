@@ -195,10 +195,6 @@ vec3 reflect(const vec3& l, const vec3& n) {
 
 static const float RAY_EPSILON = 1e-6f;
 
-vec3 lambert_brdf(const vec3& albedo, const vec3& light_dir, const vec3& normal) {
-	return albedo * std::max(0.0f, dot(light_dir, normal));
-}
-
 vec3 calc_light_incidence(const Scene& scene, Rng& rng, const Ray& ray, int remaining_depth) {
 	vec3 color = vec3_0;
 
@@ -213,11 +209,13 @@ vec3 calc_light_incidence(const Scene& scene, Rng& rng, const Ray& ray, int rema
 			for (int sample = 0; sample < NUM_LIGHT_SAMPLES; ++sample) {
 				const LightSample light_sample = light.samplePoint(rng);
 				const vec3 light_vec = light_sample.point - surface_hit->position;
+				const vec3 light_dir = normalized(light_vec);
 
-				if (!find_any_intersection(scene, Ray{surface_hit->position + surface_hit->normal * RAY_EPSILON, light_vec}, 1.0f)) {
-					const vec3 reflectance = lambert_brdf(albedo, normalized(light_vec), surface_hit->normal);
+				const vec3 reflectance = albedo;
+
+				if (reflectance != vec3_0 && !find_any_intersection(scene, Ray{surface_hit->position + surface_hit->normal * RAY_EPSILON, light_vec}, 1.0f)) {
 					const vec3 illuminance = light.calcIntensity(light_sample.point, -light_vec) * (1.0f / length_sqr(light_vec));
-					light_contribution += reflectance * illuminance * (1.0f / light_sample.pdf);
+					light_contribution += reflectance * illuminance  * std::max(0.0f, dot(light_dir, surface_hit->normal)) * (1.0f / light_sample.pdf);
 				}
 			}
 			color += light_contribution * (1.0f / NUM_LIGHT_SAMPLES);
