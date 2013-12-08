@@ -249,7 +249,7 @@ int main(int, char* []) {
 			const vec2 film_coord = filmspace_from_screenspace(mvec2(float(x), float(y)), mvec2(float(IMAGE_WIDTH), float(IMAGE_HEIGHT))) * mvec2(1.0f, -1.0f);
 			const Ray camera_ray = scene.camera.createRay(film_coord);
 			
-			image_data[y*IMAGE_WIDTH + x] = calc_light_incidence(scene, rng, camera_ray, 5);
+			image_data[y*IMAGE_WIDTH + x] = calc_light_incidence(scene, rng, camera_ray, 50);
 		}
 		std::cout << (y * 100.0f / (IMAGE_HEIGHT-1)) << "%\n";
 	}
