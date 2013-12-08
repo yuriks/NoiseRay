@@ -252,5 +252,6 @@ int main(int, char* []) {
 		std::cout << (y * 100.0f / (IMAGE_HEIGHT-1)) << "%\n";
 	}
 
+	tonemap_image(image_data, IMAGE_WIDTH, IMAGE_HEIGHT);
 	save_srgb_image(image_data, IMAGE_WIDTH, IMAGE_HEIGHT);
 }

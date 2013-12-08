@@ -33,4 +33,14 @@ void save_srgb_image(const std::vector<yks::vec3>& pixels, int width, int height
 	stbi_write_png(buffer, width, height, 3, image_byte_data.data(), 0);
 }
 
+void tonemap_image(std::vector<yks::vec3>& pixels, int width, int height) {
+	for (int y = 0; y < height; ++y) {
+		for (int x = 0; x < width; x++) {
+			vec3 xyY = xyY_from_XYZ(XYZ_from_sRGB * pixels[y*width + x]);
+			xyY[2] = xyY[2] / (1.0f + xyY[2]);
+			pixels[y*width + x] = sRGB_from_XYZ * XYZ_from_xyY(xyY);
+		}
+	}
+}
+
 }
