@@ -131,7 +131,7 @@ private:
 
 Scene setup_scene() {
 	const auto black = std::make_shared<TextureSolid>(vec3_0);
-	const auto white = std::make_shared<TextureSolid>(vec3_1);
+	const auto white = std::make_shared<TextureSolid>(vec3_1 * 0.75f);
 	const auto red = std::make_shared<TextureSolid>(vec3_x);
 
 	Scene s(Camera(vec3_y * 0.2, orient(vec3_y, -vec3_z), 75.0f));
@@ -155,7 +155,7 @@ Scene setup_scene() {
 		std::make_unique<ShapePlane>(TransformPair().translate(vec3_y * -1.0f))
 		));
 
-	s.lights.push_back(SceneLight(mvec3(-2.0f, 4.0f, -4.0f), vec3_1 * 80, 0.25f));
+	s.lights.push_back(SceneLight(mvec3(-2.0f, 4.0f, -4.0f), vec3_1 * 160, 0.25f));
 
 	return std::move(s);
 }
@@ -203,7 +203,7 @@ vec3 calc_light_incidence(const Scene& scene, Rng& rng, const Ray& ray, int rema
 		const vec3 albedo = surface_hit->object->material.diffuse->getValue(*surface_hit);
 
 		for (const SceneLight& light : scene.lights) {
-			const int NUM_LIGHT_SAMPLES = 500;
+			const int NUM_LIGHT_SAMPLES = 50;
 			vec3 light_contribution = vec3_0;
 
 			for (int sample = 0; sample < NUM_LIGHT_SAMPLES; ++sample) {
@@ -228,7 +228,7 @@ vec3 calc_light_incidence(const Scene& scene, Rng& rng, const Ray& ray, int rema
 			color += specular_reflectance * 0.5f;
 		}
 	} else {
-		color = vec3_0;
+		color = lerp(mvec3(1.0f, 0.2f, 0.0f), vec3_0, 1.0f - std::pow(1.0f - std::max(0.0f, dot(ray.direction, vec3_y)), 5)) * 0.5f;
 	}
 
 	return color;
