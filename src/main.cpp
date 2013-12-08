@@ -24,6 +24,7 @@
 #include <memory>
 #include <vector>
 #include <random>
+#include <iostream>
 
 using namespace yks;
 
@@ -61,21 +62,29 @@ private:
 	NONCOPYABLE(SceneObject);
 };
 
+struct LightSample {
+	vec3 point;
+	float pdf;
+};
+
 struct SceneLight {
 	vec3 origin;
 	vec3 intensity;
 	float radius;
 
-	// Emittance = Power / (4*pi*radius^2)
-	// Intensity = Emittance / 2*pi
+	// Emittance = Power / Area = Power / (4*pi*radius^2)
+	// Intensity = Emittance / (2*pi) = Power / (8*pi^2*radius^2)
 	SceneLight(const vec3& origin, const vec3& total_power, float radius)
-		: origin(origin), intensity(total_power * (1.0f / (2*radius*radius))), radius(radius)
+		: origin(origin), intensity(total_power * (1.0f / (8*pi*pi)) * (1.0f / sqr(radius))), radius(radius)
 	{}
 
-	vec3 samplePoint(Rng& rng) const {
+	LightSample samplePoint(Rng& rng) const {
 		const float a = rng.canonical();
 		const float b = rng.canonical();
-		return uniform_point_on_sphere(a, b) * radius + origin;
+		return LightSample{
+			uniform_point_on_sphere(a, b) * radius + origin,
+			1.0f / (4.0f * pi * sqr(radius)),
+		};
 	}
 
 	vec3 calcIntensity(const vec3& point, const vec3& direction) const {
@@ -146,7 +155,7 @@ Scene setup_scene() {
 		std::make_unique<ShapePlane>(TransformPair().translate(vec3_y * -1.0f))
 		));
 
-	s.lights.push_back(SceneLight(mvec3(-2.0f, 4.0f, -4.0f), vec3_1 * 40, 1));
+	s.lights.push_back(SceneLight(mvec3(-2.0f, 4.0f, -4.0f), vec3_1 * 80, 0.25f));
 
 	return std::move(s);
 }
@@ -186,19 +195,32 @@ vec3 reflect(const vec3& l, const vec3& n) {
 
 static const float RAY_EPSILON = 1e-6f;
 
+vec3 lambert_brdf(const vec3& albedo, const vec3& light_dir, const vec3& normal) {
+	return albedo * std::max(0.0f, dot(light_dir, normal));
+}
+
 vec3 calc_light_incidence(const Scene& scene, Rng& rng, const Ray& ray, int remaining_depth) {
 	vec3 color = vec3_0;
 
 	const Optional<Intersection> surface_hit = find_nearest_intersection(scene, ray);
 	if (surface_hit) {
-		for (const SceneLight& light : scene.lights) {
-			const vec3 light_sample = light.samplePoint(rng);
-			const vec3 light_vec = light_sample - surface_hit->position;
+		const vec3 albedo = surface_hit->object->material.diffuse->getValue(*surface_hit);
 
-			if (!find_any_intersection(scene, Ray{surface_hit->position + surface_hit->normal * RAY_EPSILON, light_vec}, 1.0f)) {
-				const vec3 albedo = surface_hit->object->material.diffuse->getValue(*surface_hit);
-				color += albedo * std::max(0.0f, dot(normalized(light_vec), surface_hit->normal)) * (light.calcIntensity(light_sample, -light_vec) * (1.0f / dot(light_vec, light_vec)));
+		for (const SceneLight& light : scene.lights) {
+			const int NUM_LIGHT_SAMPLES = 500;
+			vec3 light_contribution = vec3_0;
+
+			for (int sample = 0; sample < NUM_LIGHT_SAMPLES; ++sample) {
+				const LightSample light_sample = light.samplePoint(rng);
+				const vec3 light_vec = light_sample.point - surface_hit->position;
+
+				if (!find_any_intersection(scene, Ray{surface_hit->position + surface_hit->normal * RAY_EPSILON, light_vec}, 1.0f)) {
+					const vec3 reflectance = lambert_brdf(albedo, normalized(light_vec), surface_hit->normal);
+					const vec3 illuminance = light.calcIntensity(light_sample.point, -light_vec) * (1.0f / length_sqr(light_vec));
+					light_contribution += reflectance * illuminance * (1.0f / light_sample.pdf);
+				}
 			}
+			color += light_contribution * (1.0f / NUM_LIGHT_SAMPLES);
 		}
 
 		const vec3 specular_reflectance = surface_hit->object->material.specular->getValue(*surface_hit);
@@ -215,8 +237,8 @@ vec3 calc_light_incidence(const Scene& scene, Rng& rng, const Ray& ray, int rema
 }
 
 int main(int, char* []) {
-	static const int IMAGE_WIDTH = 1280;
-	static const int IMAGE_HEIGHT = 720;
+	static const int IMAGE_WIDTH = 640;
+	static const int IMAGE_HEIGHT = 480;
 	std::vector<vec3> image_data(IMAGE_WIDTH * IMAGE_HEIGHT);
 
 	const Scene scene = setup_scene();
@@ -229,6 +251,7 @@ int main(int, char* []) {
 			
 			image_data[y*IMAGE_WIDTH + x] = calc_light_incidence(scene, rng, camera_ray, 5);
 		}
+		std::cout << (y * 100.0f / (IMAGE_HEIGHT-1)) << "%\n";
 	}
 
 	save_srgb_image(image_data, IMAGE_WIDTH, IMAGE_HEIGHT);
