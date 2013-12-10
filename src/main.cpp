@@ -7,6 +7,7 @@
 #include "math/vec.hpp"
 #include "Optional.hpp"
 #include "noncopyable.hpp"
+#include "util.hpp"
 
 #include "materials/Material.hpp"
 #include "materials/TextureCheckerboard.hpp"
@@ -215,7 +216,7 @@ vec3 calc_light_incidence(const Scene& scene, Rng& rng, const Ray& ray, int rema
 
 				if (reflectance != vec3_0 && !find_any_intersection(scene, Ray{surface_hit->position + surface_hit->normal * RAY_EPSILON, light_vec}, 1.0f)) {
 					const vec3 illuminance = light.calcIntensity(light_sample.point, -light_vec) * (1.0f / length_sqr(light_vec));
-					light_contribution += reflectance * illuminance  * std::max(0.0f, dot(light_dir, surface_hit->normal)) * (1.0f / light_sample.pdf);
+					light_contribution += reflectance * illuminance  * vmax(0.0f, dot(light_dir, surface_hit->normal)) * (1.0f / light_sample.pdf);
 				}
 			}
 			color += light_contribution * (1.0f / NUM_LIGHT_SAMPLES);
@@ -228,7 +229,7 @@ vec3 calc_light_incidence(const Scene& scene, Rng& rng, const Ray& ray, int rema
 			color += specular_reflectance * 0.5f;
 		}
 	} else {
-		color = lerp(mvec3(1.0f, 0.2f, 0.0f), vec3_0, 1.0f - std::pow(1.0f - std::max(0.0f, dot(ray.direction, vec3_y)), 5)) * 0.5f;
+		color = lerp(mvec3(1.0f, 0.2f, 0.0f), vec3_0, 1.0f - std::pow(1.0f - vmax(0.0f, dot(ray.direction, vec3_y)), 5)) * 0.5f;
 	}
 
 	return color;
