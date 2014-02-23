@@ -164,7 +164,7 @@ vec3 calc_light_incidence(const Scene& scene, Rng& rng, const Ray& ray, int rema
 			vec3 light_contribution = vec3_0;
 
 			for (int sample = 0; sample < NUM_LIGHT_SAMPLES; ++sample) {
-				const LightSample light_sample = light.samplePoint(rng);
+				const LightSample light_sample = light.samplePoint(rng, surface_hit->position);
 				const vec3 light_vec = light_sample.point - surface_hit->position;
 				const vec3 light_dir = normalized(light_vec);
 
