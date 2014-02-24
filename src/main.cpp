@@ -68,27 +68,26 @@ struct LightSample {
 	float pdf;
 };
 
-struct SceneLight {
-	vec3 origin;
+struct SceneLight : ShapeSphere {
 	vec3 intensity;
-	float radius;
 
 	// Emittance = Power / Area = Power / (4*pi*radius^2)
 	// Intensity = Emittance / (2*pi) = Power / (8*pi^2*radius^2)
-	SceneLight(const vec3& origin, const vec3& total_power, float radius)
-		: origin(origin), intensity(total_power * (1.0f / (8*pi*pi)) * (1.0f / sqr(radius))), radius(radius)
+	SceneLight(const ShapeSphere& sphere, const vec3& total_power)
+		: ShapeSphere(sphere), intensity(total_power * (1.0f / (8 * pi*pi)) * (1.0f / sqr(radius)))
 	{}
 
 	LightSample samplePoint(Rng& rng) const {
 		const float a = rng.canonical();
 		const float b = rng.canonical();
 		return LightSample{
-			uniform_point_on_sphere(a, b) * radius + origin,
+			mvec3(transform.parentFromLocal * mvec4(uniform_point_on_sphere(a, b) * radius, 1.0f)),
 			1.0f / (4.0f * pi * sqr(radius)),
 		};
 	}
 
 	vec3 calcIntensity(const vec3& point, const vec3& direction) const {
+		const vec3 origin = mvec3(transform.parentFromLocal * mvec4(vec3_0, 1.0f));
 		return dot(point - origin, direction) >= 0.0f ? intensity : vec3_0;
 	}
 };
@@ -156,7 +155,10 @@ Scene setup_scene() {
 		std::make_unique<ShapePlane>(TransformPair().translate(vec3_y * -1.0f))
 		));
 
-	s.lights.push_back(SceneLight(mvec3(-2.0f, 4.0f, -4.0f), vec3_1 * 160, 0.25f));
+	s.lights.push_back(SceneLight(
+		ShapeSphere(TransformPair().translate(mvec3(-2.0f, 4.0f, -4.0f)), 0.25f),
+		vec3_1 * 160
+		));
 
 	return std::move(s);
 }
