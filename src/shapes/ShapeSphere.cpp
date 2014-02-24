@@ -7,12 +7,12 @@ using namespace yks;
 
 Optional<float> ShapeSphere::hasIntersection(const Ray& r) const {
 	const Ray local_ray = transform.localFromParent * r;
-	return intersect_with_sphere(vec3_0, 1.0f, local_ray);
+	return intersect_with_sphere(vec3_0, radius, local_ray);
 }
 
 Optional<Intersection> ShapeSphere::intersect(const Ray& r) const {
 	const Ray local_ray = transform.localFromParent * r;
-	const Optional<float> intersection = intersect_with_sphere(vec3_0, 1.0f, local_ray);
+	const Optional<float> intersection = intersect_with_sphere(vec3_0, radius, local_ray);
 
 	if (!intersection) {
 		return Optional<Intersection>();

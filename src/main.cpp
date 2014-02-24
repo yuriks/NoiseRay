@@ -138,11 +138,11 @@ Scene setup_scene() {
 	Scene s(Camera(vec3_y * 0.2, orient(vec3_y, -vec3_z), 75.0f));
 	s.objects.push_back(SceneObject(
 		Material(black, std::make_shared<TextureSolid>(1.0f, 0.4f, 0.4f)),
-		std::make_unique<ShapeSphere>(TransformPair().translate(mvec3(0.0f, 0.0f, -5.0f)))
+		std::make_unique<ShapeSphere>(TransformPair().translate(mvec3(0.0f, 0.0f, -5.0f)), 1.0f)
 		));
 	s.objects.push_back(SceneObject(
 		Material(white, black),
-		std::make_unique<ShapeSphere>(TransformPair().scale(0.25f).translate(mvec3(-0.5f, 1.5f, -3.0f)))
+		std::make_unique<ShapeSphere>(TransformPair().translate(mvec3(-0.5f, 1.5f, -3.0f)), 0.25f)
 		));
 
 	const mat<2, 4> plane_tex_mapping = {{
