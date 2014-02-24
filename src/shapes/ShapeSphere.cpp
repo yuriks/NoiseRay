@@ -24,6 +24,6 @@ Optional<Intersection> ShapeSphere::intersect(const Ray& r) const {
 	i.position = r(t);
 	vec3 local_pos = local_ray(t);
 	i.uv = mvec2(std::atan2(local_pos[2], local_pos[0]) / (2*pi) + 0.5f, std::acos(local_pos[1]) / pi);
-	i.normal = mvec3(transpose(transform.localFromParent) * mvec4(normalized(local_ray(t)), 0.0f));
+	i.normal = normalized(mvec3(transpose(transform.localFromParent) * mvec4(local_ray(t), 0.0f)));
 	return make_optional<Intersection>(i);
 }
