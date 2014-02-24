@@ -27,6 +27,7 @@
 #include <memory>
 #include <vector>
 #include <iostream>
+#include <tbb/tbb.h>
 
 using namespace yks;
 
@@ -197,17 +198,26 @@ int main(int, char* []) {
 	std::vector<vec3> image_data(IMAGE_WIDTH * IMAGE_HEIGHT);
 
 	const Scene scene = setup_scene();
-	Rng rng;
+	Rng global_rng;
+	global_rng.seed_with_default();
+	tbb::spin_mutex rng_mutex;
 
-	for (int y = 0; y < IMAGE_HEIGHT; ++y) {
-		for (int x = 0; x < IMAGE_WIDTH; x++) {
-			const vec2 film_coord = filmspace_from_screenspace(mvec2(float(x), float(y)), mvec2(float(IMAGE_WIDTH), float(IMAGE_HEIGHT))) * mvec2(1.0f, -1.0f);
-			const Ray camera_ray = scene.camera.createRay(film_coord);
-			
-			image_data[y*IMAGE_WIDTH + x] = calc_light_incidence(scene, rng, camera_ray, 50);
+	tbb::parallel_for(tbb::blocked_range2d<int>(0, IMAGE_HEIGHT, 0, IMAGE_WIDTH), [&](const tbb::blocked_range2d<int>& range) {
+		Rng rng;
+		{
+			tbb::spin_mutex::scoped_lock rng_lock;
+			rng.seed_with_rng(global_rng);
 		}
-		std::cout << (y * 100.0f / (IMAGE_HEIGHT-1)) << "%\n";
-	}
+
+		for (int y = range.rows().begin(), y_end = range.rows().end(); y != y_end; ++y) {
+			for (int x = range.cols().begin(), x_end = range.cols().end(); x != x_end; x++) {
+				const vec2 film_coord = filmspace_from_screenspace(mvec2(float(x), float(y)), mvec2(float(IMAGE_WIDTH), float(IMAGE_HEIGHT))) * mvec2(1.0f, -1.0f);
+				const Ray camera_ray = scene.camera.createRay(film_coord);
+
+				image_data[y*IMAGE_WIDTH + x] = calc_light_incidence(scene, rng, camera_ray, 50);
+			}
+		}
+	});
 
 	tonemap_image(image_data, IMAGE_WIDTH, IMAGE_HEIGHT);
 	save_srgb_image(image_data, IMAGE_WIDTH, IMAGE_HEIGHT);
