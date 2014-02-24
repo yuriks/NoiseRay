@@ -18,34 +18,17 @@
 #include "shapes/ShapeSphere.hpp"
 #include "shapes/ShapePlane.hpp"
 
+#include "Rng.hpp"
+#include "light.hpp"
 #include "output.hpp"
 
 #include <algorithm>
 #include <limits>
 #include <memory>
 #include <vector>
-#include <random>
 #include <iostream>
 
 using namespace yks;
-
-struct Rng {
-	std::mt19937 engine;
-	std::uniform_real_distribution<float> canonical_distribution; // std::generate_canonical is broken in VS2013
-
-	Rng() {
-		static const uint32_t seed_seq[] = {
-			0x4587ba0e, 0xad01370f, 0xdd817882, 0xdc98c4aa,
-			0x4cbf0235, 0x7dba82eb, 0xea593627, 0x597e5052
-		};
-		std::seed_seq seq(std::begin(seed_seq), std::end(seed_seq));
-		engine.seed(seq);
-	}
-
-	float canonical() {
-		return canonical_distribution(engine);
-	}
-};
 
 struct SceneObject {
 	Material material;
@@ -61,35 +44,6 @@ struct SceneObject {
 
 private:
 	NONCOPYABLE(SceneObject);
-};
-
-struct LightSample {
-	vec3 point;
-	float pdf;
-};
-
-struct SceneLight : ShapeSphere {
-	vec3 intensity;
-
-	// Emittance = Power / Area = Power / (4*pi*radius^2)
-	// Intensity = Emittance / (2*pi) = Power / (8*pi^2*radius^2)
-	SceneLight(const ShapeSphere& sphere, const vec3& total_power)
-		: ShapeSphere(sphere), intensity(total_power * (1.0f / (8 * pi*pi)) * (1.0f / sqr(radius)))
-	{}
-
-	LightSample samplePoint(Rng& rng) const {
-		const float a = rng.canonical();
-		const float b = rng.canonical();
-		return LightSample{
-			mvec3(transform.parentFromLocal * mvec4(uniform_point_on_sphere(a, b) * radius, 1.0f)),
-			1.0f / (4.0f * pi * sqr(radius)),
-		};
-	}
-
-	vec3 calcIntensity(const vec3& point, const vec3& direction) const {
-		const vec3 origin = mvec3(transform.parentFromLocal * mvec4(vec3_0, 1.0f));
-		return dot(point - origin, direction) >= 0.0f ? intensity : vec3_0;
-	}
 };
 
 float focal_distance_from_fov(const float fov_degrees) {

@@ -80,6 +80,7 @@
     <ClCompile Include="libyuriks\math\misc.cpp" />
     <ClCompile Include="libyuriks\math\Quaternion.cpp" />
     <ClCompile Include="libyuriks\math\Sphere.cpp" />
+    <ClCompile Include="src\light.cpp" />
     <ClCompile Include="src\output.cpp" />
     <ClCompile Include="libyuriks\stb_image_write.cpp" />
     <ClCompile Include="src\main.cpp" />
@@ -96,6 +97,7 @@
     <ClInclude Include="libyuriks\math\TransformPair.hpp" />
     <ClInclude Include="libyuriks\math\vec.hpp" />
     <ClInclude Include="libyuriks\Optional.hpp" />
+    <ClInclude Include="src\light.hpp" />
     <ClInclude Include="src\materials\Material.hpp" />
     <ClInclude Include="src\materials\TextureCheckerboard.hpp" />
     <ClInclude Include="src\materials\TextureSolid.hpp" />
@@ -105,6 +107,7 @@
     <ClInclude Include="libyuriks\stb_image_write.h" />
     <ClInclude Include="libyuriks\noncopyable.hpp" />
     <ClInclude Include="libyuriks\util.hpp" />
+    <ClInclude Include="src\Rng.hpp" />
     <ClInclude Include="src\shapes\SceneShape.hpp" />
     <ClInclude Include="src\shapes\ShapePlane.hpp" />
     <ClInclude Include="src\shapes\ShapeSphere.hpp" />
