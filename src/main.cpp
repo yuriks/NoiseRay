@@ -161,7 +161,7 @@ vec3 calc_light_incidence(const Scene& scene, Rng& rng, const Ray& ray, int rema
 		const vec3 albedo = surface_hit->object->material.diffuse->getValue(*surface_hit);
 
 		for (const SceneLight& light : scene.lights) {
-			const int NUM_LIGHT_SAMPLES = 50;
+			const int NUM_LIGHT_SAMPLES = 64;
 			vec3 light_contribution = vec3_0;
 
 			for (int sample = 0; sample < NUM_LIGHT_SAMPLES; ++sample) {
@@ -192,6 +192,15 @@ vec3 calc_light_incidence(const Scene& scene, Rng& rng, const Ray& ray, int rema
 	return color;
 }
 
+float triangle_filter(vec2 x) {
+	const vec2 centered = x * 2.0f - mvec2(1.0f, 1.0f);
+	return (1.0f - std::abs(centered[0])) * (1.0f - std::abs(centered[1]));
+}
+
+float box_filter(vec2) {
+	return 1.0f;
+}
+
 int main(int, char* []) {
 	static const int IMAGE_WIDTH = 1280;
 	static const int IMAGE_HEIGHT = 720;
@@ -214,10 +223,21 @@ int main(int, char* []) {
 
 		for (int y = range.rows().begin(), y_end = range.rows().end(); y != y_end; ++y) {
 			for (int x = range.cols().begin(), x_end = range.cols().end(); x != x_end; x++) {
-				const vec2 film_coord = filmspace_from_screenspace(mvec2(float(x), float(y)), mvec2(float(IMAGE_WIDTH), float(IMAGE_HEIGHT))) * mvec2(1.0f, -1.0f);
-				const Ray camera_ray = scene.camera.createRay(film_coord);
+				static const int NUM_IMAGE_SAMPLES = 4;
+				vec3 pixel_color = vec3_0;
+				float total_weigth = 0.0f;
 
-				image_data[y*IMAGE_WIDTH + x] = calc_light_incidence(scene, rng, camera_ray, 50);
+				for (int sample = 0; sample < NUM_IMAGE_SAMPLES; ++sample) {
+					const vec2 pixel_offset = mvec2(rng.canonical(), rng.canonical());
+					const vec2 pixel_pos = mvec2(float(x), float(y));
+					const vec2 film_coord = filmspace_from_screenspace(pixel_pos + pixel_offset, mvec2(float(IMAGE_WIDTH), float(IMAGE_HEIGHT))) * mvec2(1.0f, -1.0f);
+					const Ray camera_ray = scene.camera.createRay(film_coord);
+
+					const float filter_value = triangle_filter(pixel_offset);
+					total_weigth += filter_value;
+					pixel_color += calc_light_incidence(scene, rng, camera_ray, 50) * filter_value;
+				}
+				image_data[y*IMAGE_WIDTH + x] = pixel_color * (1.0f / total_weigth);
 			}
 		}
 		size_t new_progress = (progress += range.rows().size() * range.cols().size());
