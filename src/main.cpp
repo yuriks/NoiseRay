@@ -202,7 +202,10 @@ int main(int, char* []) {
 	global_rng.seed_with_default();
 	tbb::spin_mutex rng_mutex;
 
-	tbb::parallel_for(tbb::blocked_range2d<int>(0, IMAGE_HEIGHT, 0, IMAGE_WIDTH), [&](const tbb::blocked_range2d<int>& range) {
+	tbb::atomic<size_t> progress;
+	progress = 0;
+
+	tbb::parallel_for(tbb::blocked_range2d<int>(0, IMAGE_HEIGHT, 256, 0, IMAGE_WIDTH, 256), [&](const tbb::blocked_range2d<int>& range) {
 		Rng rng;
 		{
 			tbb::spin_mutex::scoped_lock rng_lock;
@@ -217,6 +220,8 @@ int main(int, char* []) {
 				image_data[y*IMAGE_WIDTH + x] = calc_light_incidence(scene, rng, camera_ray, 50);
 			}
 		}
+		size_t new_progress = (progress += range.rows().size() * range.cols().size());
+		std::cout << (new_progress * 100.0f / (IMAGE_WIDTH * IMAGE_HEIGHT)) << "%\n";
 	});
 
 	tonemap_image(image_data, IMAGE_WIDTH, IMAGE_HEIGHT);
