@@ -193,8 +193,8 @@ vec3 calc_light_incidence(const Scene& scene, Rng& rng, const Ray& ray, int rema
 }
 
 int main(int, char* []) {
-	static const int IMAGE_WIDTH = 640;
-	static const int IMAGE_HEIGHT = 480;
+	static const int IMAGE_WIDTH = 1280;
+	static const int IMAGE_HEIGHT = 720;
 	std::vector<vec3> image_data(IMAGE_WIDTH * IMAGE_HEIGHT);
 
 	const Scene scene = setup_scene();
