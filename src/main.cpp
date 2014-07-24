@@ -118,10 +118,6 @@ Scene setup_scene() {
 	return std::move(s);
 }
 
-static vec2 filmspace_from_screenspace(const vec2 screen_pos, const vec2 screen_size) {
-	return (screen_pos - (screen_size * 0.5f)) * 2.0f * (1.0f / screen_size[1]);
-}
-
 Optional<Intersection> find_nearest_intersection(const Scene& scene, const Ray ray) {
 	Optional<Intersection> nearest_intersection;
 
@@ -195,6 +191,10 @@ vec3 calc_light_incidence(const Scene& scene, Rng& rng, const Ray& ray, int rema
 int main(int, char* []) {
 	static const int IMAGE_WIDTH = 1280;
 	static const int IMAGE_HEIGHT = 720;
+
+	const vec2 image_scale = mvec2(2.0f / IMAGE_HEIGHT, -2.0f / IMAGE_HEIGHT);
+	const vec2 image_scale_offset = mvec2(-float(IMAGE_WIDTH) / IMAGE_HEIGHT, 1.0f);
+
 	std::vector<vec3> image_data(IMAGE_WIDTH * IMAGE_HEIGHT);
 
 	const Scene scene = setup_scene();
@@ -217,13 +217,16 @@ int main(int, char* []) {
 				static const int NUM_IMAGE_SAMPLES = 4;
 				vec3 pixel_color = vec3_0;
 
+				const vec2 pixel_pos = mvec2(float(x), float(y));
+
 				for (int sample = 0; sample < NUM_IMAGE_SAMPLES; ++sample) {
-					const vec2 pixel_offset = mvec2(rng.canonical(), rng.canonical());
-					const vec2 pixel_pos = mvec2(float(x), float(y));
-					const vec2 film_coord = filmspace_from_screenspace(pixel_pos + pixel_offset, mvec2(float(IMAGE_WIDTH), float(IMAGE_HEIGHT))) * mvec2(1.0f, -1.0f);
+					const vec2 sample_offset = mvec2(rng.canonical(), rng.canonical());
+					const vec2 sample_pos = pixel_pos + sample_offset;
+
+					const vec2 film_coord = sample_pos * image_scale + image_scale_offset;
 					const Ray camera_ray = scene.camera.createRay(film_coord);
 
-					pixel_color += calc_light_incidence(scene, rng, camera_ray, 50);
+					pixel_color += calc_light_incidence(scene, rng, camera_ray, 10);
 				}
 				image_data[y*IMAGE_WIDTH + x] = pixel_color * (1.0f / NUM_IMAGE_SAMPLES);
 			}
