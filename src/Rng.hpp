@@ -1,25 +1,40 @@
 #pragma once
 #include <cstdint>
-#include <random>
 
 struct Rng {
-	std::mt19937 engine;
-	std::uniform_real_distribution<float> canonical_distribution; // std::generate_canonical is broken in VS2013
+	typedef uint64_t result_type;
+
+	uint64_t s[2];
+
+	result_type operator()() {
+		// This is the xorshift128+ PRNG
+		// http://xorshift.di.unimi.it/
+		uint64_t s1 = s[0];
+		const uint64_t s0 = s[1];
+		s[0] = s0;
+		s1 ^= s1 << 23; // a
+		return (s[1] = (s1 ^ s0 ^ (s1 >> 17) ^ (s0 >> 26))) + s0; // b, c
+	}
+
+	static result_type min() {
+		return std::numeric_limits<result_type>::min();
+	}
+
+	static result_type max() {
+		return std::numeric_limits<result_type>::max();
+	}
 
 	void seed_with_default() {
-		static const uint32_t seed_seq[] = {
-			0x4587ba0e, 0xad01370f, 0xdd817882, 0xdc98c4aa,
-			0x4cbf0235, 0x7dba82eb, 0xea593627, 0x597e5052
-		};
-		std::seed_seq seq(std::begin(seed_seq), std::end(seed_seq));
-		engine.seed(seq);
+		s[0] = 0x4587ba0ead01370fULL;
+		s[1] = 0xdd817882dc98c4aaULL;
 	}
 
 	void seed_with_rng(Rng& rng) {
-		engine.seed(rng.engine());
+		s[0] = rng();
+		s[1] = rng();
 	}
 
 	float canonical() {
-		return canonical_distribution(engine);
+		return (*this)() * (1.0f / max());
 	}
 };
