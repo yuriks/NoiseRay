@@ -35,11 +35,14 @@ namespace yks {
 	}};
 
 	inline vec3 xyY_from_XYZ(const vec3& XYZ) {
-		float sum = 1.0f / (XYZ[0] + XYZ[1] + XYZ[2]);
-		return mvec3(XYZ[0] * sum, XYZ[1] * sum, XYZ[1]);
+		float sum = XYZ[0] + XYZ[1] + XYZ[2];
+		return sum == 0.f ? vec3_0 : mvec3(XYZ[0] / sum, XYZ[1] / sum, XYZ[1]);
 	}
 
 	inline vec3 XYZ_from_xyY(const vec3& xyY) {
+		if (xyY[1] == 0.f) {
+			return mvec3(0.f, 0.f, 0.f);
+		}
 		float Yy = xyY[2] / xyY[1];
 		return mvec3(Yy * xyY[0], xyY[2], Yy * (1.0f - xyY[0] - xyY[1]));
 	}
