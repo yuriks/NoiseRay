@@ -163,6 +163,7 @@
     <ClInclude Include="libyuriks\math\TransformPair.hpp" />
     <ClInclude Include="libyuriks\math\vec.hpp" />
     <ClInclude Include="libyuriks\Optional.hpp" />
+    <ClInclude Include="libyuriks\Rng.hpp" />
     <ClInclude Include="src\light.hpp" />
     <ClInclude Include="src\materials\Material.hpp" />
     <ClInclude Include="src\materials\TextureCheckerboard.hpp" />
@@ -173,7 +174,6 @@
     <ClInclude Include="libyuriks\stb_image_write.h" />
     <ClInclude Include="libyuriks\noncopyable.hpp" />
     <ClInclude Include="libyuriks\util.hpp" />
-    <ClInclude Include="src\Rng.hpp" />
     <ClInclude Include="src\shapes\SceneShape.hpp" />
     <ClInclude Include="src\shapes\ShapePlane.hpp" />
     <ClInclude Include="src\shapes\ShapeSphere.hpp" />

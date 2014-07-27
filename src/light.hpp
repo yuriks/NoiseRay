@@ -3,7 +3,9 @@
 
 #include "shapes/ShapeSphere.hpp"
 
-struct Rng;
+namespace yks {
+	struct Rng;
+}
 
 struct LightSample {
 	yks::vec3 point;
@@ -16,7 +18,7 @@ struct SceneLight : ShapeSphere {
 	// Emittance = Power / Area = Power / (4*pi*radius^2)
 	// Intensity = Emittance / (2*pi) = Power / (8*pi^2*radius^2)
 	SceneLight(const ShapeSphere& sphere, const yks::vec3& total_power);
-	LightSample samplePoint(Rng& rng) const;
-	LightSample samplePoint(Rng& rng, const yks::vec3& source) const;
+	LightSample samplePoint(yks::Rng& rng) const;
+	LightSample samplePoint(yks::Rng& rng, const yks::vec3& source) const;
 	yks::vec3 calcIntensity(const yks::vec3& point, const yks::vec3& direction) const;
 };
