@@ -92,7 +92,7 @@ Scene setup_scene() {
 
 	Scene s(Camera(vec3_y * 0.2, orient(vec3_y, -vec3_z), 75.0f));
 	s.objects.push_back(SceneObject(
-		Material(black, std::make_shared<TextureSolid>(1.0f, 0.4f, 0.4f), black),
+		Material(std::make_shared<TextureSolid>(vec3_1 * 1.0f), black, black),
 		std::make_unique<ShapeSphere>(TransformPair().translate(mvec3(0.0f, 0.0f, -5.0f)), 1.0f)
 		));
 	s.objects.push_back(SceneObject(
@@ -107,7 +107,7 @@ Scene setup_scene() {
 	const auto checkerboard = std::make_shared<TextureCheckerboard>(white, red);
 
 	s.objects.push_back(SceneObject(
-		Material(std::make_shared<TexMapFromPosition>(checkerboard, plane_tex_mapping), white, black),
+		Material(std::make_shared<TexMapFromPosition>(checkerboard, plane_tex_mapping), black, black),
 		std::make_unique<ShapePlane>(TransformPair().translate(vec3_y * -1.0f))
 		));
 
@@ -187,7 +187,8 @@ vec3 calc_light_incidence(const Scene& scene, Rng& rng, const Ray& ray, int dept
 			color += surface_hit->object->material.emmision->getValue(*surface_hit);
 		}
 	} else {
-		color = lerp(mvec3(1.0f, 0.2f, 0.0f), vec3_0, 1.0f - std::pow(1.0f - vmax(0.0f, dot(ray.direction, vec3_y)), 5)) * 0.5f;
+		//color = lerp(mvec3(1.0f, 0.2f, 0.0f), mvec3(0.35f, 0.9f, 1.0f), 1.0f - std::pow(1.0f - vmax(0.0f, dot(ray.direction, vec3_y)), 2)) * 0.5f;
+		color = lerp(mvec3(0.02f, 0.06f, 0.36f), mvec3(0.0f, 0.0f, 0.0f), 1.0f - std::pow(1.0f - vmax(0.0f, dot(ray.direction, vec3_y)), 2)) * 0.5f;
 	}
 
 	return color;
