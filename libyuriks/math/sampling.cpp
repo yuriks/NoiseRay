@@ -13,16 +13,15 @@ namespace yks {
 		return mvec3(cos_latitude * std::cos(longitude), y, cos_latitude * std::sin(longitude));
 	}
 
-	vec3 cosine_weighted_point_on_hemisphere(Rng& rng, const vec3 up) {
-		// Use rejection sampling to sample a point inside the unit disk.
-		vec2 p;
-		float s;
-		do {
-			p = mvec2(rng.canonical(), rng.canonical()) * 2.0f - mvec2(1.0f, 1.0f);
-			s = length_sqr(p);
-		} while (s > 1.0f);
+	vec2 uniform_point_on_disk(const float u1, const float u2) {
+		const float theta = two_pi * u1;
+		const float r = std::sqrt(u2);
+		return mvec2(r * std::cos(theta), r * std::sin(theta));
+	}
 
-		return reorient_vector(mvec3(p[0], std::sqrt(1.0f - s), p[1]), up);
+	vec3 cosine_weighted_point_on_hemisphere(const float u1, const float u2, const vec3 up) {
+		const vec2 p = uniform_point_on_disk(u1, u2);
+		return reorient_vector(mvec3(p[0], std::sqrt(1.0f - length_sqr(p)), p[1]), up);
 	}
 
 	vec3 uniform_vector_in_cone(float a, float b, float cos_angle) {

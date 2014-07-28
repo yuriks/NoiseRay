@@ -163,7 +163,7 @@ vec3 calc_light_incidence(const Scene& scene, Rng& rng, const Ray& ray, int dept
 		const vec3 out_dir = -normalized(ray.direction);
 
 		// Diffuse
-		vec3 in_dir = cosine_weighted_point_on_hemisphere(rng, surface_hit->normal);
+		vec3 in_dir = cosine_weighted_point_on_hemisphere(rng.canonical(), rng.canonical(), surface_hit->normal);
 		const vec3 reflectance = surface_hit->object->material.diffuse_brdf(*surface_hit, in_dir, out_dir);
 
 		if (depth > 0 && reflectance != vec3_0) {
