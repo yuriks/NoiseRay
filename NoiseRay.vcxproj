@@ -145,6 +145,7 @@
     <ClCompile Include="libyuriks\math\MatrixTransform.cpp" />
     <ClCompile Include="libyuriks\math\misc.cpp" />
     <ClCompile Include="libyuriks\math\Quaternion.cpp" />
+    <ClCompile Include="libyuriks\math\sampling.cpp" />
     <ClCompile Include="libyuriks\math\Sphere.cpp" />
     <ClCompile Include="src\light.cpp" />
     <ClCompile Include="src\output.cpp" />
@@ -159,6 +160,7 @@
     <ClInclude Include="libyuriks\math\misc.hpp" />
     <ClInclude Include="libyuriks\math\Quaternion.hpp" />
     <ClInclude Include="libyuriks\math\Ray.hpp" />
+    <ClInclude Include="libyuriks\math\sampling.hpp" />
     <ClInclude Include="libyuriks\math\Sphere.hpp" />
     <ClInclude Include="libyuriks\math\TransformPair.hpp" />
     <ClInclude Include="libyuriks\math\vec.hpp" />

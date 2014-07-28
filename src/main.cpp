@@ -4,6 +4,7 @@
 #include "math/TransformPair.hpp"
 #include "math/mat.hpp"
 #include "math/misc.hpp"
+#include "math/sampling.hpp"
 #include "math/vec.hpp"
 #include "Optional.hpp"
 #include "noncopyable.hpp"
@@ -70,7 +71,7 @@ struct Camera {
 struct Scene {
 	Camera camera;
 	std::vector<SceneObject> objects;
-	std::vector<SceneLight> lights;
+	std::vector<size_t> lights;
 
 	Scene(Camera camera)
 		: camera(camera)
@@ -91,11 +92,11 @@ Scene setup_scene() {
 
 	Scene s(Camera(vec3_y * 0.2, orient(vec3_y, -vec3_z), 75.0f));
 	s.objects.push_back(SceneObject(
-		Material(black, std::make_shared<TextureSolid>(1.0f, 0.4f, 0.4f)),
+		Material(black, std::make_shared<TextureSolid>(1.0f, 0.4f, 0.4f), black),
 		std::make_unique<ShapeSphere>(TransformPair().translate(mvec3(0.0f, 0.0f, -5.0f)), 1.0f)
 		));
 	s.objects.push_back(SceneObject(
-		Material(white, black),
+		Material(white, black, black),
 		std::make_unique<ShapeSphere>(TransformPair().translate(mvec3(-0.5f, 1.5f, -3.0f)), 0.25f)
 		));
 
@@ -106,14 +107,15 @@ Scene setup_scene() {
 	const auto checkerboard = std::make_shared<TextureCheckerboard>(white, red);
 
 	s.objects.push_back(SceneObject(
-		Material(std::make_shared<TexMapFromPosition>(checkerboard, plane_tex_mapping), white),
+		Material(std::make_shared<TexMapFromPosition>(checkerboard, plane_tex_mapping), white, black),
 		std::make_unique<ShapePlane>(TransformPair().translate(vec3_y * -1.0f))
 		));
 
-	s.lights.push_back(SceneLight(
-		ShapeSphere(TransformPair().translate(mvec3(-2.0f, 4.0f, -4.0f)), 0.25f),
-		vec3_1 * 160
+	s.objects.push_back(SceneObject(
+		Material(black, black, std::make_shared<TextureSolid>(vec3_1 * 160)),
+		std::make_unique<ShapeSphere>(TransformPair().translate(mvec3(-2.0f, 4.0f, -4.0f)), 0.25f)
 		));
+	s.lights.push_back(s.objects.size() - 1);
 
 	return std::move(s);
 }
@@ -149,37 +151,40 @@ vec3 reflect(const vec3& l, const vec3& n) {
 
 static const float RAY_EPSILON = 1e-6f;
 
-vec3 calc_light_incidence(const Scene& scene, Rng& rng, const Ray& ray, int remaining_depth) {
+vec3 calc_light_incidence(const Scene& scene, Rng& rng, const Ray& ray, int depth) {
 	vec3 color = vec3_0;
+	float weight = 0.f;
+
+	depth += 1;
+	const bool kill_ray = rng.canonical() > (1.5f / depth);
 
 	const Optional<Intersection> surface_hit = find_nearest_intersection(scene, ray);
-	if (surface_hit) {
-		const vec3 albedo = surface_hit->object->material.diffuse->getValue(*surface_hit);
+	if (!kill_ray && surface_hit) {
+		const vec3 out_dir = -normalized(ray.direction);
 
-		for (const SceneLight& light : scene.lights) {
-			const int NUM_LIGHT_SAMPLES = 64;
-			vec3 light_contribution = vec3_0;
+		// Diffuse
+		vec3 in_dir = cosine_weighted_point_on_hemisphere(rng, surface_hit->normal);
+		const vec3 reflectance = surface_hit->object->material.diffuse_brdf(*surface_hit, in_dir, out_dir);
 
-			for (int sample = 0; sample < NUM_LIGHT_SAMPLES; ++sample) {
-				const LightSample light_sample = light.samplePoint(rng, surface_hit->position);
-				const vec3 light_vec = light_sample.point - surface_hit->position;
-				const vec3 light_dir = normalized(light_vec);
-
-				const vec3 reflectance = albedo;
-
-				if (reflectance != vec3_0 && !find_any_intersection(scene, Ray{surface_hit->position + surface_hit->normal * RAY_EPSILON, light_vec}, 1.0f)) {
-					const vec3 illuminance = light.calcIntensity(light_sample.point, -light_vec) * (1.0f / length_sqr(light_vec));
-					light_contribution += reflectance * illuminance  * vmax(0.0f, dot(light_dir, surface_hit->normal)) * (1.0f / light_sample.pdf);
-				}
-			}
-			color += light_contribution * (1.0f / NUM_LIGHT_SAMPLES);
+		if (depth > 0 && reflectance != vec3_0) {
+			const vec3 illuminance = calc_light_incidence(scene, rng, Ray{ surface_hit->position + surface_hit->normal * RAY_EPSILON, in_dir }, depth);
+			color += pi * reflectance * illuminance;
 		}
+		weight += 1.0f;
 
 		const vec3 specular_reflectance = surface_hit->object->material.specular->getValue(*surface_hit);
-		if (remaining_depth > 0 && specular_reflectance != vec3_0) {
-			color += specular_reflectance * calc_light_incidence(scene, rng, Ray{surface_hit->position + surface_hit->normal * RAY_EPSILON, reflect(normalized(ray.direction), surface_hit->normal)}, remaining_depth-1);
+		if (depth > 0 && specular_reflectance != vec3_0) {
+			color += specular_reflectance * calc_light_incidence(scene, rng, Ray{surface_hit->position + surface_hit->normal * RAY_EPSILON, reflect(normalized(ray.direction), surface_hit->normal)}, depth);
 		} else {
 			color += specular_reflectance * 0.5f;
+		}
+
+		if (weight != 0.f) {
+			color *= 1.0f / weight;
+		}
+
+		if (dot(out_dir, surface_hit->normal) >= 0.f) {
+			color += surface_hit->object->material.emmision->getValue(*surface_hit);
 		}
 	} else {
 		color = lerp(mvec3(1.0f, 0.2f, 0.0f), vec3_0, 1.0f - std::pow(1.0f - vmax(0.0f, dot(ray.direction, vec3_y)), 5)) * 0.5f;
@@ -189,8 +194,8 @@ vec3 calc_light_incidence(const Scene& scene, Rng& rng, const Ray& ray, int rema
 }
 
 int main(int, char* []) {
-	static const int IMAGE_WIDTH = 1280;
-	static const int IMAGE_HEIGHT = 720;
+	static const int IMAGE_WIDTH = 320;
+	static const int IMAGE_HEIGHT = 240;
 
 	const vec2 image_scale = mvec2(2.0f / IMAGE_HEIGHT, -2.0f / IMAGE_HEIGHT);
 	const vec2 image_scale_offset = mvec2(-float(IMAGE_WIDTH) / IMAGE_HEIGHT, 1.0f);
@@ -205,7 +210,7 @@ int main(int, char* []) {
 	tbb::atomic<size_t> progress;
 	progress = 0;
 
-	tbb::parallel_for(tbb::blocked_range2d<int>(0, IMAGE_HEIGHT, 256, 0, IMAGE_WIDTH, 256), [&](const tbb::blocked_range2d<int>& range) {
+	tbb::parallel_for(tbb::blocked_range2d<int>(0, IMAGE_HEIGHT, 64, 0, IMAGE_WIDTH, 64), [&](const tbb::blocked_range2d<int>& range) {
 		Rng rng;
 		{
 			tbb::spin_mutex::scoped_lock rng_lock;
@@ -214,7 +219,7 @@ int main(int, char* []) {
 
 		for (int y = range.rows().begin(), y_end = range.rows().end(); y != y_end; ++y) {
 			for (int x = range.cols().begin(), x_end = range.cols().end(); x != x_end; x++) {
-				static const int NUM_IMAGE_SAMPLES = 4;
+				static const int NUM_IMAGE_SAMPLES = 4096*2;
 				vec3 pixel_color = vec3_0;
 
 				const vec2 pixel_pos = mvec2(float(x), float(y));
@@ -226,9 +231,9 @@ int main(int, char* []) {
 					const vec2 film_coord = sample_pos * image_scale + image_scale_offset;
 					const Ray camera_ray = scene.camera.createRay(film_coord);
 
-					pixel_color += calc_light_incidence(scene, rng, camera_ray, 10);
+					pixel_color += calc_light_incidence(scene, rng, camera_ray, 0) * (1.0f / NUM_IMAGE_SAMPLES);
 				}
-				image_data[y*IMAGE_WIDTH + x] = pixel_color * (1.0f / NUM_IMAGE_SAMPLES);
+				image_data[y*IMAGE_WIDTH + x] = pixel_color;
 			}
 		}
 		size_t new_progress = (progress += range.rows().size() * range.cols().size());

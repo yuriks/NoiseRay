@@ -5,6 +5,10 @@
 #include "Optional.hpp"
 #include <utility>
 
+namespace yks {
+	struct Rng;
+}
+
 struct SceneObject;
 struct SceneShape;
 
@@ -16,6 +20,11 @@ struct Intersection {
 
 	const SceneObject* object;
 	const SceneShape* shape;
+};
+
+struct ShapeSample {
+	yks::vec3 point;
+	float pdf;
 };
 
 struct SceneShape {
@@ -43,5 +52,14 @@ struct SceneShape {
 			return yks::Optional<Intersection>();
 		}
 		return intersection;
+	}
+
+	virtual ShapeSample sampleArea(yks::Rng& /* rng */) const {
+		assert(false);
+		std::abort();
+	};
+	virtual ShapeSample sampleArea(yks::Rng& /* rng */, const yks::vec3& /* source */) const {
+		assert(false);
+		std::abort();
 	}
 };
