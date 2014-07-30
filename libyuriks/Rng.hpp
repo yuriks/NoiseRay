@@ -38,7 +38,11 @@ namespace yks {
 		}
 
 		float canonical() {
-			return (*this)() * (1.0f / max());
+			const result_type mask = 0x7fffffULL;
+			const float reciprocal = (1.0f / 0x7fffffULL);
+			// This is int64_t because it generates more compact int -> float conversion code than unsigned.
+			int64_t mantissa = (*this)() & mask;
+			return (float)mantissa * reciprocal;
 		}
 	};
 
