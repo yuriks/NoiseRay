@@ -92,11 +92,11 @@ Scene setup_scene() {
 
 	Scene s(Camera(vec3_y * 0.2, orient(vec3_y, -vec3_z), 75.0f));
 	s.objects.push_back(SceneObject(
-		Material(std::make_shared<TextureSolid>(vec3_1 * 1.0f), black, black),
+		Material(std::make_shared<TextureSolid>(vec3_1 * 1.0f), black),
 		std::make_unique<ShapeSphere>(TransformPair().translate(mvec3(0.0f, 0.0f, -5.0f)), 1.0f)
 		));
 	s.objects.push_back(SceneObject(
-		Material(white, black, black),
+		Material(white, black),
 		std::make_unique<ShapeSphere>(TransformPair().translate(mvec3(-0.5f, 1.5f, -3.0f)), 0.25f)
 		));
 
@@ -107,12 +107,12 @@ Scene setup_scene() {
 	const auto checkerboard = std::make_shared<TextureCheckerboard>(white, red);
 
 	s.objects.push_back(SceneObject(
-		Material(std::make_shared<TexMapFromPosition>(checkerboard, plane_tex_mapping), black, black),
+		Material(std::make_shared<TexMapFromPosition>(checkerboard, plane_tex_mapping), black),
 		std::make_unique<ShapePlane>(TransformPair().translate(vec3_y * -1.0f))
 		));
 
 	s.objects.push_back(SceneObject(
-		Material(black, black, std::make_shared<TextureSolid>(vec3_1 * 160)),
+		Material(black, std::make_shared<TextureSolid>(vec3_1 * 160)),
 		std::make_unique<ShapeSphere>(TransformPair().translate(mvec3(-2.0f, 4.0f, -4.0f)), 0.25f)
 		));
 	s.lights.push_back(s.objects.size() - 1);
@@ -153,7 +153,6 @@ static const float RAY_EPSILON = 1e-6f;
 
 vec3 calc_light_incidence(const Scene& scene, Rng& rng, const Ray& ray, int depth) {
 	vec3 color = vec3_0;
-	float weight = 0.f;
 
 	depth += 1;
 	const bool kill_ray = rng.canonical() > (1.5f / depth);
@@ -169,18 +168,6 @@ vec3 calc_light_incidence(const Scene& scene, Rng& rng, const Ray& ray, int dept
 		if (depth > 0 && reflectance != vec3_0) {
 			const vec3 illuminance = calc_light_incidence(scene, rng, Ray{ surface_hit->position + surface_hit->normal * RAY_EPSILON, in_dir }, depth);
 			color += pi * reflectance * illuminance;
-		}
-		weight += 1.0f;
-
-		const vec3 specular_reflectance = surface_hit->object->material.specular->getValue(*surface_hit);
-		if (depth > 0 && specular_reflectance != vec3_0) {
-			color += specular_reflectance * calc_light_incidence(scene, rng, Ray{surface_hit->position + surface_hit->normal * RAY_EPSILON, reflect(normalized(ray.direction), surface_hit->normal)}, depth);
-		} else {
-			color += specular_reflectance * 0.5f;
-		}
-
-		if (weight != 0.f) {
-			color *= 1.0f / weight;
 		}
 
 		if (dot(out_dir, surface_hit->normal) >= 0.f) {
