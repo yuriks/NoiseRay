@@ -88,3 +88,19 @@ ShapeSample ShapeSphere::sampleArea(Rng& rng, const yks::vec3& source) const {
 		1.0f / (two_pi * sqr(radius) * (1.0f - cos_theta))
 	};
 }
+
+float ShapeSphere::areaPdf(const yks::vec3& /* dir */) const {
+	return 1.0f / (4.0f * pi * sqr(radius));
+}
+
+float ShapeSphere::areaPdf(const yks::vec3& source, const yks::vec3& dir) const {
+	const vec3 origin = mvec3(transform.parentFromLocal * mvec4(vec3_0, 1.0f));
+	const float distance = length(source - origin);
+
+	if (distance <= radius) {
+		return areaPdf(dir);
+	}
+
+	const float cos_theta = radius / distance;
+	return 1.0f / (two_pi * sqr(radius) * (1.0f - cos_theta));
+}

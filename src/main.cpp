@@ -117,6 +117,14 @@ Scene setup_scene() {
 		));
 	s.lights.push_back(s.objects.size() - 1);
 
+#if 1
+	s.objects.push_back(SceneObject(
+		Material(black, std::make_shared<TextureSolid>(vec3_1 * 500)),
+		std::make_unique<ShapeSphere>(TransformPair().translate(mvec3(-4.0f, 0.0f, -5.0f)), 0.1f)
+		));
+	s.lights.push_back(s.objects.size() - 1);
+#endif
+
 	return std::move(s);
 }
 
@@ -151,26 +159,71 @@ vec3 reflect(const vec3& l, const vec3& n) {
 
 static const float RAY_EPSILON = 1e-6f;
 
-vec3 calc_light_incidence(const Scene& scene, Rng& rng, const Ray& ray, int depth) {
-	vec3 color = vec3_0;
+// dw/dA = cos(theta)/r^2
+// dw = cos(theta)/r^2 dA
+// dA = r^2/cos(theta) dw
 
+static float power_heuristic(float main_pdf, float other_pdf) {
+	return sqr(main_pdf) / (sqr(main_pdf) + sqr(other_pdf));
+}
+
+static Ray ray_from_surface(const Intersection& hit, const vec3 out_vec) {
+	return Ray{ hit.position + hit.normal * RAY_EPSILON, out_vec };
+}
+
+vec3 calc_light_incidence(const Scene& scene, Rng& rng, const Ray& ray, int depth) {
 	depth += 1;
 	const bool kill_ray = rng.canonical() > (1.5f / depth);
 	if (kill_ray) {
 		return vec3_0;
 	}
 
+	vec3 color = vec3_0;
+
 	const Optional<Intersection> surface_hit = find_nearest_intersection(scene, ray);
 	if (surface_hit) {
 		const vec3 out_dir = -normalized(ray.direction);
 
-		// Diffuse
-		vec3 in_dir = cosine_weighted_point_on_hemisphere(rng.canonical(), rng.canonical(), surface_hit->normal);
-		const vec3 reflectance = surface_hit->object->material.diffuse_brdf(*surface_hit, in_dir, out_dir);
+		const size_t light_index = (size_t)(rng.canonical() * scene.lights.size());
+		const SceneObject* light = &scene.objects[scene.lights[light_index]];
+		const float light_weight = (float)scene.lights.size();
 
-		if (depth > 0 && reflectance != vec3_0) {
-			const vec3 illuminance = calc_light_incidence(scene, rng, Ray{ surface_hit->position + surface_hit->normal * RAY_EPSILON, in_dir }, depth);
-			color += pi * reflectance * illuminance;
+		// Sample BRDF
+		{
+			const vec3 in_dir = cosine_weighted_point_on_hemisphere(rng.canonical(), rng.canonical(), surface_hit->normal);
+			const vec3 reflectance = surface_hit->object->material.diffuse_brdf(*surface_hit, in_dir, out_dir);
+			const float cos_term = dot(in_dir, surface_hit->normal);
+
+			const float brdf_pdf = cos_term / pi;
+
+			const Optional<Intersection> light_hit = light->shape->intersect(ray_from_surface(*surface_hit, in_dir));
+			const float light_pdf = (light_hit ? light->shape->areaPdf(surface_hit->position, in_dir) : 0.f);
+
+			if (brdf_pdf != 0.f && reflectance != vec3_0) {
+				const vec3 illuminance = calc_light_incidence(scene, rng, ray_from_surface(*surface_hit, in_dir), depth);
+				color += (1.0f / brdf_pdf) * cos_term * reflectance * illuminance * power_heuristic(brdf_pdf, light_pdf);
+			}
+		}
+
+		// Sample lights
+		{
+			const ShapeSample light_sample = light->shape->sampleArea(rng, surface_hit->position);
+			const vec3 light_vec = light_sample.point - surface_hit->position;
+			const vec3 in_dir = normalized(light_vec);
+			const float cos_term = vmax(0.f, dot(in_dir, surface_hit->normal));
+
+			const Optional<Intersection> light_hit = find_nearest_intersection(scene, ray_from_surface(*surface_hit, light_vec));
+			bool occluded = !light_hit || light_hit->object != light;
+			const float light_pdf = light_weight * light_sample.pdf;
+
+			const float brdf_pdf = cos_term / pi;
+
+			const vec3 reflectance = surface_hit->object->material.diffuse_brdf(*surface_hit, in_dir, out_dir);
+			if (!occluded && light_pdf != 0.f && reflectance != vec3_0) {
+				const vec3 illuminance = calc_light_incidence(scene, rng, ray_from_surface(*surface_hit, in_dir), depth);
+				const float differential_area = -dot(light_hit->normal, in_dir) / length_sqr(light_vec);
+				color += light_weight * (1.0f / light_pdf) * differential_area * cos_term * reflectance * illuminance * power_heuristic(light_pdf, brdf_pdf);
+			}
 		}
 
 		if (dot(out_dir, surface_hit->normal) >= 0.f) {
@@ -210,7 +263,7 @@ int main(int, char* []) {
 
 		for (int y = range.rows().begin(), y_end = range.rows().end(); y != y_end; ++y) {
 			for (int x = range.cols().begin(), x_end = range.cols().end(); x != x_end; x++) {
-				static const int NUM_IMAGE_SAMPLES = 4096*2;
+				static const int NUM_IMAGE_SAMPLES = 1024;
 				vec3 pixel_color = vec3_0;
 
 				const vec2 pixel_pos = mvec2(float(x), float(y));

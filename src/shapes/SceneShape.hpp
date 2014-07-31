@@ -62,4 +62,12 @@ struct SceneShape {
 		assert(false);
 		std::abort();
 	}
+	virtual float areaPdf(const yks::vec3& /* dir */) const {
+		assert(false);
+		std::abort();
+	}
+	virtual float areaPdf(const yks::vec3& /* source */, const yks::vec3& /* dir */) const {
+		assert(false);
+		std::abort();
+	}
 };

@@ -17,4 +17,6 @@ struct ShapeSphere : SceneShape {
 
 	virtual ShapeSample sampleArea(yks::Rng& rng) const override;
 	virtual ShapeSample sampleArea(yks::Rng& rng, const yks::vec3& source) const override;
+	virtual float areaPdf(const yks::vec3& dir) const override;
+	virtual float areaPdf(const yks::vec3& source, const yks::vec3& dir) const override;
 };
