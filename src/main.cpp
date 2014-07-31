@@ -156,9 +156,12 @@ vec3 calc_light_incidence(const Scene& scene, Rng& rng, const Ray& ray, int dept
 
 	depth += 1;
 	const bool kill_ray = rng.canonical() > (1.5f / depth);
+	if (kill_ray) {
+		return vec3_0;
+	}
 
 	const Optional<Intersection> surface_hit = find_nearest_intersection(scene, ray);
-	if (!kill_ray && surface_hit) {
+	if (surface_hit) {
 		const vec3 out_dir = -normalized(ray.direction);
 
 		// Diffuse
