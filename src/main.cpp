@@ -172,10 +172,17 @@ static Ray ray_from_surface(const Intersection& hit, const vec3 out_vec) {
 }
 
 vec3 calc_light_incidence(const Scene& scene, Rng& rng, const Ray& ray, int depth) {
+	float ray_weight = 1.0f;
+
 	depth += 1;
-	const bool kill_ray = rng.canonical() > (1.5f / depth);
-	if (kill_ray) {
-		return vec3_0;
+	if (depth > 2) {
+		const float live_probability = 0.75f;
+
+		if (rng.canonical() > live_probability) {
+			return vec3_0;
+		} else {
+			ray_weight = 1.0f / live_probability;
+		}
 	}
 
 	vec3 color = vec3_0;
@@ -234,7 +241,7 @@ vec3 calc_light_incidence(const Scene& scene, Rng& rng, const Ray& ray, int dept
 		color = lerp(mvec3(0.02f, 0.06f, 0.36f), mvec3(0.0f, 0.0f, 0.0f), 1.0f - std::pow(1.0f - vmax(0.0f, dot(ray.direction, vec3_y)), 2)) * 0.5f;
 	}
 
-	return color;
+	return color * ray_weight;
 }
 
 int main(int, char* []) {
