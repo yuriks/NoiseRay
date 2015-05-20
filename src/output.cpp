@@ -5,7 +5,6 @@
 #include <ctime>
 #include <cstdio>
 #include "math/vec.hpp"
-#include "stb_image_write.h"
 #include "util.hpp"
 #include "./srgb.hpp"
 
@@ -33,8 +32,6 @@ void save_srgb_image(const std::vector<yks::vec3>& pixels, int width, int height
 
 	char buffer[64];
 	std::sprintf(buffer, "output/%04d-%02d-%02d_%02d-%02d-%02d_NoiseRay.png", tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec);
-
-	stbi_write_png(buffer, width, height, 3, image_byte_data.data(), 0);
 }
 
 void tonemap_image(std::vector<yks::vec3>& pixels, int width, int height) {

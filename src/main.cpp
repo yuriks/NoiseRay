@@ -6,6 +6,7 @@
 #include "math/misc.hpp"
 #include "math/sampling.hpp"
 #include "math/vec.hpp"
+#include "srgb.hpp"
 #include "Optional.hpp"
 #include "noncopyable.hpp"
 #include "util.hpp"
@@ -28,7 +29,9 @@
 #include <memory>
 #include <vector>
 #include <iostream>
-#include <tbb/tbb.h>
+#include <cstring>
+
+#include <3ds.h>
 
 using namespace yks;
 
@@ -57,14 +60,16 @@ struct Camera {
 	vec3 origin;
 	mat3 orientation;
 	float focal_length; // distance from image plane
+	float focus_distance;
 
-	Camera(vec3 origin, mat3 orientation, float vertical_fov)
-		: origin(origin), orientation(orientation), focal_length(focal_distance_from_fov(vertical_fov))
+	Camera(vec3 origin, mat3 orientation, float vertical_fov, float focus_distance)
+		: origin(origin), orientation(orientation), focal_length(focal_distance_from_fov(vertical_fov)), focus_distance(focus_distance)
 	{}
 
-	Ray createRay(const vec2 film_pos) const {
-		const vec3 cameraspace_ray = mvec3(film_pos[0], film_pos[1], focal_length);
-		return Ray{origin, orientation * cameraspace_ray};
+	Ray createRay(const vec2 film_pos, float separation) const {
+		const vec3 cameraspace_ray = mvec3(film_pos[0] - separation, film_pos[1], focal_length);
+		vec3 offs = orientation * (vec3_x * separation);
+		return Ray{origin + offs, orientation * (cameraspace_ray * (focus_distance / focal_length))};
 	}
 };
 
@@ -88,23 +93,24 @@ private:
 Scene setup_scene() {
 	const auto black = std::make_shared<TextureSolid>(vec3_0);
 	const auto white = std::make_shared<TextureSolid>(vec3_1 * 0.75f);
-	const auto red = std::make_shared<TextureSolid>(vec3_x);
+	const auto red = std::make_shared<TextureSolid>(vec3_x * 0.9f);
+	const auto dark_red = std::make_shared<TextureSolid>(vec3_x * 0.45f);
 
-	Scene s(Camera(vec3_y * 0.2, orient(vec3_y, -vec3_z), 75.0f));
+	Scene s(Camera(vec3_y * 0.2, orient(vec3_y, -vec3_z), 45.0f, 4.5f));
 	s.objects.push_back(SceneObject(
 		Material(std::make_shared<TextureSolid>(vec3_1 * 1.0f), black),
 		std::make_unique<ShapeSphere>(TransformPair().translate(mvec3(0.0f, 0.0f, -5.0f)), 1.0f)
 		));
 	s.objects.push_back(SceneObject(
 		Material(white, black),
-		std::make_unique<ShapeSphere>(TransformPair().translate(mvec3(-0.5f, 1.5f, -3.0f)), 0.25f)
+		std::make_unique<ShapeSphere>(TransformPair().translate(mvec3(-0.5f, 1.5f, -4.0f)), 0.25f)
 		));
 
 	const mat<2, 4> plane_tex_mapping = {{
 		1, 0, 0, 0,
 		0, 0, 1, 0
 	}};
-	const auto checkerboard = std::make_shared<TextureCheckerboard>(white, red);
+	const auto checkerboard = std::make_shared<TextureCheckerboard>(dark_red, red);
 
 	s.objects.push_back(SceneObject(
 		Material(std::make_shared<TexMapFromPosition>(checkerboard, plane_tex_mapping), black),
@@ -117,7 +123,7 @@ Scene setup_scene() {
 		));
 	s.lights.push_back(s.objects.size() - 1);
 
-#if 1
+#if 0
 	s.objects.push_back(SceneObject(
 		Material(black, std::make_shared<TextureSolid>(vec3_1 * 500)),
 		std::make_unique<ShapeSphere>(TransformPair().translate(mvec3(-4.0f, 0.0f, -5.0f)), 0.1f)
@@ -238,59 +244,132 @@ vec3 calc_light_incidence(const Scene& scene, Rng& rng, const Ray& ray, int dept
 		}
 	} else {
 		//color = lerp(mvec3(1.0f, 0.2f, 0.0f), mvec3(0.35f, 0.9f, 1.0f), 1.0f - std::pow(1.0f - vmax(0.0f, dot(ray.direction, vec3_y)), 2)) * 0.5f;
-		color = lerp(mvec3(0.02f, 0.06f, 0.36f), mvec3(0.0f, 0.0f, 0.0f), 1.0f - std::pow(1.0f - vmax(0.0f, dot(ray.direction, vec3_y)), 2)) * 0.5f;
+		color = lerp(mvec3(0.02f, 0.06f, 0.36f), mvec3(0.0f, 0.0f, 0.0f), 1.0f - std::pow(1.0f - vmax(0.0f, dot(normalized(ray.direction), vec3_y)), 2.0f)) * 0.5f;
 	}
 
 	return color * ray_weight;
 }
 
-int main(int, char* []) {
-	static const int IMAGE_WIDTH = 320;
+yks::vec3 tonemap_pixel(yks::vec3 pixel) {
+	vec3 xyY = xyY_from_XYZ(XYZ_from_sRGB * pixel);
+	xyY[2] = xyY[2] / (1.0f + xyY[2]);
+	return sRGB_from_XYZ * XYZ_from_xyY(xyY);
+}
+
+u32 wait_input() {
+	while (true) {
+		hidScanInput();
+		u32 keys = hidKeysDown();
+		if (keys != 0)
+			return keys;
+		gspWaitForVBlank();
+	}
+}
+
+#define CONFIG_3D_SLIDERSTATE (*(volatile	float*)0x1FF81080)
+
+bool use_3d = true;
+
+bool render() {
+	u8* fb_l = gfxGetFramebuffer(GFX_TOP, GFX_LEFT, nullptr, nullptr);
+	u8* fb_r = gfxGetFramebuffer(GFX_TOP, GFX_RIGHT, nullptr, nullptr);
+	std::memset(fb_l, 0, 400 * 240 * 3);
+	std::memset(fb_r, 0, 400 * 240 * 3);
+
+	float slider = CONFIG_3D_SLIDERSTATE;
+	float separation = slider * 0.5;
+
+	static const int IMAGE_WIDTH = 400;
 	static const int IMAGE_HEIGHT = 240;
 
 	const vec2 image_scale = mvec2(2.0f / IMAGE_HEIGHT, -2.0f / IMAGE_HEIGHT);
 	const vec2 image_scale_offset = mvec2(-float(IMAGE_WIDTH) / IMAGE_HEIGHT, 1.0f);
 
-	std::vector<vec3> image_data(IMAGE_WIDTH * IMAGE_HEIGHT);
-
 	const Scene scene = setup_scene();
-	Rng global_rng;
-	global_rng.seed_with_default();
-	tbb::spin_mutex rng_mutex;
+	Rng rng;
+	rng.seed_with_default();
 
-	tbb::atomic<size_t> progress;
-	progress = 0;
+	std::vector<vec3> image_buffer_l(IMAGE_WIDTH * IMAGE_HEIGHT);
+	std::vector<vec3> image_buffer_r(IMAGE_WIDTH * IMAGE_HEIGHT);
+	unsigned int num_samples = 0;
 
-	tbb::parallel_for(tbb::blocked_range2d<int>(0, IMAGE_HEIGHT, 64, 0, IMAGE_WIDTH, 64), [&](const tbb::blocked_range2d<int>& range) {
-		Rng rng;
-		{
-			tbb::spin_mutex::scoped_lock rng_lock;
-			rng.seed_with_rng(global_rng);
-		}
+	while (true) {
+		num_samples += 1;
 
-		for (int y = range.rows().begin(), y_end = range.rows().end(); y != y_end; ++y) {
-			for (int x = range.cols().begin(), x_end = range.cols().end(); x != x_end; x++) {
-				static const int NUM_IMAGE_SAMPLES = 1024;
-				vec3 pixel_color = vec3_0;
-
+		for (int y = 0, y_end = IMAGE_HEIGHT; y != y_end; ++y) {
+			for (int x = 0, x_end = IMAGE_WIDTH; x != x_end; x++) {
 				const vec2 pixel_pos = mvec2(float(x), float(y));
 
-				for (int sample = 0; sample < NUM_IMAGE_SAMPLES; ++sample) {
-					const vec2 sample_offset = mvec2(rng.canonical(), rng.canonical());
-					const vec2 sample_pos = pixel_pos + sample_offset;
+				const vec2 sample_offset = mvec2(rng.canonical(), rng.canonical());
+				const vec2 sample_pos = pixel_pos + sample_offset;
+				const vec2 film_coord = sample_pos * image_scale + image_scale_offset;
 
-					const vec2 film_coord = sample_pos * image_scale + image_scale_offset;
-					const Ray camera_ray = scene.camera.createRay(film_coord);
+				{
+					const Ray camera_ray = scene.camera.createRay(film_coord, -separation);
 
-					pixel_color += calc_light_incidence(scene, rng, camera_ray, 0) * (1.0f / NUM_IMAGE_SAMPLES);
+					vec3 pixel_color = calc_light_incidence(scene, rng, camera_ray, 0) * (1.0f / num_samples);
+					vec3 tmp = image_buffer_l[y * IMAGE_WIDTH + x];
+					tmp = tmp * (float(num_samples - 1) / float(num_samples)) + pixel_color;
+					image_buffer_l[y * IMAGE_WIDTH + x] = tmp;
+
+					vec3 p = tonemap_pixel(tmp);
+					if (!std::isfinite(p[0]) || !std::isfinite(p[1]) || !std::isfinite(p[2])) {
+						p = mvec3(1.0f, 0.0f, 1.0f);
+					}
+					size_t pixel_ofs = (x * 240 + (240 - 1 - y)) * 3;
+					fb_l[pixel_ofs + 2] = byte_from_linear(clamp(0.0f, p[0], 1.0f));
+					fb_l[pixel_ofs + 1] = byte_from_linear(clamp(0.0f, p[1], 1.0f));
+					fb_l[pixel_ofs + 0] = byte_from_linear(clamp(0.0f, p[2], 1.0f));
 				}
-				image_data[y*IMAGE_WIDTH + x] = pixel_color;
+
+				{
+					const Ray camera_ray = scene.camera.createRay(film_coord, separation);
+
+					vec3 pixel_color = calc_light_incidence(scene, rng, camera_ray, 0) * (1.0f / num_samples);
+					vec3 tmp = image_buffer_r[y * IMAGE_WIDTH + x];
+					tmp = tmp * (float(num_samples - 1) / float(num_samples)) + pixel_color;
+					image_buffer_r[y * IMAGE_WIDTH + x] = tmp;
+
+					vec3 p = tonemap_pixel(tmp);
+					if (!std::isfinite(p[0]) || !std::isfinite(p[1]) || !std::isfinite(p[2])) {
+						p = mvec3(1.0f, 0.0f, 1.0f);
+					}
+					size_t pixel_ofs = (x * 240 + (240 - 1 - y)) * 3;
+					fb_r[pixel_ofs + 2] = byte_from_linear(clamp(0.0f, p[0], 1.0f));
+					fb_r[pixel_ofs + 1] = byte_from_linear(clamp(0.0f, p[1], 1.0f));
+					fb_r[pixel_ofs + 0] = byte_from_linear(clamp(0.0f, p[2], 1.0f));
+				}
+			}
+
+			gfxFlushBuffers();
+			gfxSwapBuffers();
+
+			hidScanInput();
+			u32 down = hidKeysDown();
+			if (down & KEY_B) {
+				return false;
+			}
+			if (down & KEY_Y) {
+				use_3d = !use_3d;
+				gfxSet3D(use_3d);
+			}
+
+			if (slider != CONFIG_3D_SLIDERSTATE) {
+				return true;
 			}
 		}
-		size_t new_progress = (progress += range.rows().size() * range.cols().size());
-		std::cout << (new_progress * 100.0f / (IMAGE_WIDTH * IMAGE_HEIGHT)) << "%\n";
-	});
+	}
+}
 
-	tonemap_image(image_data, IMAGE_WIDTH, IMAGE_HEIGHT);
-	save_srgb_image(image_data, IMAGE_WIDTH, IMAGE_HEIGHT);
+u32 __stacksize__ = 256 * 1024;
+
+int main(int, char* []) {
+	gfxInitDefault();
+	gfxSet3D(true);
+	gfxSetDoubleBuffering(GFX_TOP, false);
+
+	while (render());
+
+	wait_input();
+	gfxExit();
 }

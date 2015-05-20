@@ -4,6 +4,7 @@
 #include "math/vec.hpp"
 #include "Optional.hpp"
 #include <utility>
+#include <cstdlib>
 
 namespace yks {
 	struct Rng;

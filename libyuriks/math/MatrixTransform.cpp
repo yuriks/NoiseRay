@@ -71,7 +71,7 @@ namespace yks {
 
 	mat4 perspective_proj(float vfov, float aspect, float z_near, float z_far)
 	{
-		float height = z_far * std::tanf(vfov * (pi / 180.f));
+		float height = z_far * std::tan(vfov * (pi / 180.f));
 
 		return frustrum_proj(height * aspect, height, z_near, z_far);
 	}
