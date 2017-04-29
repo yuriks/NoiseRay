@@ -31,9 +31,6 @@
 #include <iostream>
 #include <cstring>
 
-#include <3ds.h>
-#include <time.h>
-
 using namespace yks;
 
 struct SceneObject {
@@ -257,23 +254,19 @@ yks::vec3 tonemap_pixel(yks::vec3 pixel) {
 	return sRGB_from_XYZ * XYZ_from_xyY(xyY);
 }
 
-u32 wait_input() {
-	while (true) {
-		hidScanInput();
-		u32 keys = hidKeysDown();
-		if (keys != 0)
-			return keys;
-		gspWaitForVBlank();
-	}
-}
-
-#define CONFIG_3D_SLIDERSTATE (*(volatile	float*)0x1FF81080)
-
+const uint8_t *volatile output_fb_l = nullptr;
+const uint8_t *volatile output_fb_r = nullptr;
+volatile float CONFIG_3D_SLIDERSTATE = 0.0f;
 bool use_3d = true;
 
+void escape_output(const uint8_t* fb_l, const uint8_t* fb_r) {
+    output_fb_l = fb_l;
+    output_fb_r = fb_r;
+}
+
 bool render() {
-	u8* fb_l = gfxGetFramebuffer(GFX_TOP, GFX_LEFT, nullptr, nullptr);
-	u8* fb_r = gfxGetFramebuffer(GFX_TOP, GFX_RIGHT, nullptr, nullptr);
+    uint8_t* fb_l = new uint8_t[400 * 240 * 3];
+    uint8_t* fb_r = new uint8_t[400 * 240 * 3];
 	std::memset(fb_l, 0, 400 * 240 * 3);
 	std::memset(fb_r, 0, 400 * 240 * 3);
 
@@ -293,9 +286,6 @@ bool render() {
 	std::vector<vec3> image_buffer_l(IMAGE_WIDTH * IMAGE_HEIGHT);
 	std::vector<vec3> image_buffer_r(IMAGE_WIDTH * IMAGE_HEIGHT);
 	unsigned int num_samples = 0;
-
-    timeval time_start;
-    gettimeofday(&time_start, nullptr);
 
 	while (true) {
 		num_samples += 1;
@@ -344,56 +334,29 @@ bool render() {
 					fb_r[pixel_ofs + 0] = byte_from_linear(clamp(0.0f, p[2], 1.0f));
 				}
 			}
+            escape_output(fb_l, fb_r);
 		}
 
-        timeval time_now;
-        gettimeofday(&time_now, nullptr);
+        FILE* f = fopen("output.bin", "wb");
+        fwrite(fb_l, 1, 400 * 240 * 3, f);
+        fwrite(fb_r, 1, 400 * 240 * 3, f);
+        fclose(f);
 
-        timeval elapsed;
-        timersub(&time_now, &time_start, &elapsed);
-
-        printf("Pass %d done in %u.%03u s.\n", num_samples, (unsigned int)elapsed.tv_sec, (unsigned int)(elapsed.tv_usec / 1000));
-
-        gfxFlushBuffers();
-        gfxSwapBuffers();
-
-        hidScanInput();
-        u32 down = hidKeysDown();
-        if (down & KEY_B) {
-            return true;
-        }
-        if (down & KEY_START) {
-            return false;
-        }
-        if (down & KEY_Y) {
-            use_3d = !use_3d;
-            gfxSet3D(use_3d);
-        }
+        printf("Pass %d done in %u.%03u s.\n", num_samples, 0, 0);
 
         if (slider != CONFIG_3D_SLIDERSTATE) {
             slider = CONFIG_3D_SLIDERSTATE;
             separation = slider * 0.5f;
             //return true;
         }
+        if (num_samples == 10) return false;
 	}
 }
 
-u32 __stacksize__ = 256 * 1024;
-
 int main(int, char* []) {
-	gfxInitDefault();
-	gfxSet3D(true);
-	gfxSetDoubleBuffering(GFX_TOP, false);
-    consoleInit(GFX_BOTTOM, nullptr);
-
-    gfxFlushBuffers();
-    gfxSwapBuffers();
-
     printf("Hold keys during end of pass:\nSTART: quit, B: restart, Y: toggle 3D\n");
 
 	while (render());
 
     printf("Press any key to exit.\n");
-	wait_input();
-	gfxExit();
 }
