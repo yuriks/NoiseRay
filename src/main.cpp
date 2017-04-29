@@ -32,6 +32,7 @@
 #include <cstring>
 
 #include <3ds.h>
+#include <time.h>
 
 using namespace yks;
 
@@ -277,7 +278,7 @@ bool render() {
 	std::memset(fb_r, 0, 400 * 240 * 3);
 
 	float slider = CONFIG_3D_SLIDERSTATE;
-	float separation = slider * 0.5;
+	float separation = slider * 0.5f;
 
 	static const int IMAGE_WIDTH = 400;
 	static const int IMAGE_HEIGHT = 240;
@@ -292,6 +293,9 @@ bool render() {
 	std::vector<vec3> image_buffer_l(IMAGE_WIDTH * IMAGE_HEIGHT);
 	std::vector<vec3> image_buffer_r(IMAGE_WIDTH * IMAGE_HEIGHT);
 	unsigned int num_samples = 0;
+
+    timeval time_start;
+    gettimeofday(&time_start, nullptr);
 
 	while (true) {
 		num_samples += 1;
@@ -340,24 +344,37 @@ bool render() {
 					fb_r[pixel_ofs + 0] = byte_from_linear(clamp(0.0f, p[2], 1.0f));
 				}
 			}
-
-			gfxFlushBuffers();
-			gfxSwapBuffers();
-
-			hidScanInput();
-			u32 down = hidKeysDown();
-			if (down & KEY_B) {
-				return false;
-			}
-			if (down & KEY_Y) {
-				use_3d = !use_3d;
-				gfxSet3D(use_3d);
-			}
-
-			if (slider != CONFIG_3D_SLIDERSTATE) {
-				return true;
-			}
 		}
+
+        timeval time_now;
+        gettimeofday(&time_now, nullptr);
+
+        timeval elapsed;
+        timersub(&time_now, &time_start, &elapsed);
+
+        printf("Pass %d done in %u.%03u s.\n", num_samples, (unsigned int)elapsed.tv_sec, (unsigned int)(elapsed.tv_usec / 1000));
+
+        gfxFlushBuffers();
+        gfxSwapBuffers();
+
+        hidScanInput();
+        u32 down = hidKeysDown();
+        if (down & KEY_B) {
+            return true;
+        }
+        if (down & KEY_START) {
+            return false;
+        }
+        if (down & KEY_Y) {
+            use_3d = !use_3d;
+            gfxSet3D(use_3d);
+        }
+
+        if (slider != CONFIG_3D_SLIDERSTATE) {
+            slider = CONFIG_3D_SLIDERSTATE;
+            separation = slider * 0.5f;
+            //return true;
+        }
 	}
 }
 
@@ -367,9 +384,16 @@ int main(int, char* []) {
 	gfxInitDefault();
 	gfxSet3D(true);
 	gfxSetDoubleBuffering(GFX_TOP, false);
+    consoleInit(GFX_BOTTOM, nullptr);
+
+    gfxFlushBuffers();
+    gfxSwapBuffers();
+
+    printf("Hold keys during end of pass:\nSTART: quit, B: restart, Y: toggle 3D\n");
 
 	while (render());
 
+    printf("Press any key to exit.\n");
 	wait_input();
 	gfxExit();
 }
